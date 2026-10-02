@@ -709,6 +709,46 @@
 </div>
 
 
+<!-- WAREHOUSE ASSET DETAILS -->
+<div id="warehouse-asset-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="warehouse-asset-modal-title">
+    <div class="modal-backdrop" data-close-warehouse-asset></div>
+    <div class="modal-card warehouse-asset-details-card">
+        <div class="modal-header">
+            <div>
+                <div class="eyebrow">WAREHOUSE ASSET HISTORY</div>
+                <h2 id="warehouse-asset-modal-title">Asset</h2>
+                <p id="warehouse-asset-modal-subtitle" class="muted"></p>
+            </div>
+            <button type="button" id="close-warehouse-asset" class="icon-button" aria-label="Close">×</button>
+        </div>
+
+        <div class="warehouse-asset-history-summary" id="warehouse-asset-history-summary"></div>
+
+        <section class="details-section asset-history-graph-section">
+            <div class="details-section-heading">
+                <div>
+                    <div class="eyebrow">MOVEMENT HISTORY</div>
+                    <h3>Sent vs received</h3>
+                    <p class="muted">Daily quantities from the Asset Transactions ledger.</p>
+                </div>
+            </div>
+            <div id="warehouse-asset-movement-graph" class="asset-history-graph"></div>
+        </section>
+
+        <section class="details-section asset-history-graph-section">
+            <div class="details-section-heading">
+                <div>
+                    <div class="eyebrow">STOCK HISTORY</div>
+                    <h3>Quantity over time</h3>
+                    <p class="muted">Calculated closing quantity using the inventory balance as the anchor and the transaction ledger for historical changes.</p>
+                </div>
+            </div>
+            <div id="warehouse-asset-quantity-graph" class="asset-history-graph"></div>
+        </section>
+    </div>
+</div>
+
+
 <!-- MOVEMENT DETAILS -->
 <div id="info-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="info-modal-title">
     <div class="modal-backdrop" data-close-info></div>

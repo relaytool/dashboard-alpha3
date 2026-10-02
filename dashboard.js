@@ -214,6 +214,26 @@ document.addEventListener(
             if ($("client-details-filter-asset")) $("client-details-filter-asset").value = "";
             if (client) openClientDetails(client);
         });
+
+        $("warehouse-assets")?.addEventListener("click", event => {
+            const card = event.target.closest("[data-asset-name]");
+            if (!card) return;
+            openWarehouseAssetDetails(card.dataset.assetName);
+        });
+
+        $("warehouse-assets")?.addEventListener("keydown", event => {
+            if (event.key !== "Enter" && event.key !== " ") return;
+            const card = event.target.closest("[data-asset-name]");
+            if (!card) return;
+            event.preventDefault();
+            openWarehouseAssetDetails(card.dataset.assetName);
+        });
+
+        $("close-warehouse-asset")?.addEventListener("click", closeWarehouseAssetDetails);
+        document.addEventListener("click", event => {
+            if (event.target.matches("[data-close-warehouse-asset]")) closeWarehouseAssetDetails();
+        });
+
 $("client-details-summary")
             .addEventListener(
                 "click",
@@ -2632,7 +2652,7 @@ function bindQuickMenu() {
                 })()
                 : "";
 
-            return `<div class="warehouse-asset-card">
+            return `<div class="warehouse-asset-card" data-asset-name="${escapeAttr(assetName)}" tabindex="0" role="button" aria-label="View ${escapeAttr(assetName)} history">
                 <div class="warehouse-asset-name-row">
                     <div class="warehouse-asset-name">${escapeHtml(assetName)}</div>
                     ${verifiedBadge}
@@ -2644,6 +2664,163 @@ function bindQuickMenu() {
                 </div>
             </div>`;
         }).join("");
+    }
+
+
+    function getWarehouseAssetTransactions(asset) {
+        const filters = getDashboardFilters();
+        const wantedAsset = String(asset || "").trim().toLowerCase();
+        return getDashboardTransactions().filter(item => {
+            if (String(item.asset || "").trim().toLowerCase() !== wantedAsset) return false;
+            if (filters.client && String(item.client || "").trim() !== filters.client) return false;
+            return ["SENT", "RECEIVED", "DISCARD"].includes(String(item.movement || "").trim().toUpperCase()) && transactionDateKey(item.timestamp);
+        });
+    }
+
+    function openWarehouseAssetDetails(asset) {
+        const name = String(asset || "").trim();
+        if (!name) return;
+
+        const inventory = getDashboardInventory().find(item =>
+            String(item.asset || "").trim().toLowerCase() === name.toLowerCase()
+        );
+        const balance = Number(inventory?.balance) || 0;
+        const transactions = getWarehouseAssetTransactions(name);
+        const filters = getDashboardFilters();
+
+        $("warehouse-asset-modal-title").textContent = name;
+        $("warehouse-asset-modal-subtitle").textContent = filters.client
+            ? `Warehouse quantity and movements for ${name} · client filter: ${filters.client}`
+            : `Warehouse quantity and movements for ${name} · all clients`;
+
+        const received = transactions.filter(item => String(item.movement).trim().toUpperCase() === "RECEIVED")
+            .reduce((sum, item) => sum + (Number(item.quantity) || 0), 0);
+        const sent = transactions.filter(item => String(item.movement).trim().toUpperCase() === "SENT")
+            .reduce((sum, item) => sum + (Number(item.quantity) || 0), 0);
+        const discarded = transactions.filter(item => String(item.movement).trim().toUpperCase() === "DISCARD")
+            .reduce((sum, item) => sum + (Number(item.quantity) || 0), 0);
+
+        $("warehouse-asset-history-summary").innerHTML = `
+            <div class="warehouse-history-stat"><span>Current quantity</span><strong>${formatNumber(balance)}</strong></div>
+            <div class="warehouse-history-stat"><span>Total received</span><strong class="stat-positive">${formatNumber(received)}</strong></div>
+            <div class="warehouse-history-stat"><span>Total sent</span><strong>${formatNumber(sent)}</strong></div>
+            <div class="warehouse-history-stat"><span>Discarded</span><strong>${formatNumber(discarded)}</strong></div>
+        `;
+
+        renderWarehouseAssetMovementGraph(name, transactions);
+        renderWarehouseAssetQuantityGraph(name, transactions, balance);
+        $("warehouse-asset-modal").classList.remove("hidden");
+    }
+
+    function closeWarehouseAssetDetails() {
+        $("warehouse-asset-modal")?.classList.add("hidden");
+    }
+
+    function makeAssetHistorySeries(transactions) {
+        const daily = new Map();
+        transactions.forEach(item => {
+            const date = transactionDateKey(item.timestamp);
+            if (!date) return;
+            if (!daily.has(date)) daily.set(date, {sent: 0, received: 0, discarded: 0});
+            const entry = daily.get(date);
+            const movement = String(item.movement || "").trim().toUpperCase();
+            const quantity = Number(item.quantity) || 0;
+            if (movement === "SENT") entry.sent += quantity;
+            else if (movement === "RECEIVED") entry.received += quantity;
+            else if (movement === "DISCARD") entry.discarded += quantity;
+        });
+        return [...daily.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+    }
+
+    function renderWarehouseAssetMovementGraph(asset, transactions) {
+        const graph = $("warehouse-asset-movement-graph");
+        const points = makeAssetHistorySeries(transactions);
+        if (!points.length) {
+            graph.innerHTML = `<div class="client-graph-empty"><strong>No movement history</strong><span>No sent, received or discard transactions were found for ${escapeHtml(asset)}.</span></div>`;
+            return;
+        }
+
+        const width = Math.max(720, points.length * 88);
+        const height = 320, left = 64, right = 28, top = 44, bottom = 62;
+        const chartWidth = width - left - right, chartHeight = height - top - bottom;
+        const maxValue = Math.max(...points.flatMap(([, value]) => [value.sent, value.received, value.discarded]), 1);
+        const xFor = i => points.length === 1 ? left + chartWidth / 2 : left + (i / (points.length - 1)) * chartWidth;
+        const yFor = value => top + chartHeight - (value / maxValue) * chartHeight;
+        const pathFor = key => points.map(([, value], i) => `${i === 0 ? "M" : "L"} ${xFor(i).toFixed(1)} ${yFor(value[key]).toFixed(1)}`).join(" ");
+        const yTicks = Array.from({length: 5}, (_, i) => maxValue * (1 - i / 4));
+        const grid = yTicks.map((value, i) => {
+            const y = top + chartHeight * i / 4;
+            return `<line x1="${left}" y1="${y}" x2="${width-right}" y2="${y}" class="graph-grid"></line><text x="${left-10}" y="${y+4}" text-anchor="end" class="graph-y-label">${formatNumber(Math.round(value))}</text>`;
+        }).join("");
+        const labels = points.map(([date], i) => `<text x="${xFor(i)}" y="${height-22}" text-anchor="middle" class="graph-label">${escapeHtml(formatGraphDate(date))}</text>`).join("");
+        const pointMarkup = points.map(([date, value], i) => {
+            const x = xFor(i), sentY = yFor(value.sent), receivedY = yFor(value.received), discardY = yFor(value.discarded);
+            return `<g><title>${escapeHtml(formatGraphDate(date))}: ${formatNumber(value.sent)} sent, ${formatNumber(value.received)} received, ${formatNumber(value.discarded)} discarded</title>
+                <circle cx="${x}" cy="${sentY}" r="4.5" class="graph-point-sent"></circle>
+                <circle cx="${x}" cy="${receivedY}" r="4.5" class="graph-point-received"></circle>
+                ${value.discarded ? `<circle cx="${x}" cy="${discardY}" r="4.5" class="graph-point-discard"></circle>` : ""}
+                <text x="${x}" y="${Math.max(16, sentY-11)}" text-anchor="middle" class="graph-value-label graph-value-sent">${formatNumber(value.sent)}</text>
+                <text x="${x}" y="${Math.min(height-39, receivedY+21)}" text-anchor="middle" class="graph-value-label graph-value-received">${formatNumber(value.received)}</text>
+                ${value.discarded ? `<text x="${x}" y="${Math.max(16, discardY-11)}" text-anchor="middle" class="graph-value-label graph-value-discard">${formatNumber(value.discarded)}</text>` : ""}
+            </g>`;
+        }).join("");
+
+        graph.innerHTML = `<div class="client-graph-legend">
+            <span class="graph-legend-item"><span class="graph-legend-dot graph-legend-sent"></span>Sent</span>
+            <span class="graph-legend-item"><span class="graph-legend-dot graph-legend-received"></span>Received</span>
+            <span class="graph-legend-item"><span class="graph-legend-dot graph-legend-discard"></span>Discarded</span>
+        </div><div class="client-graph-scroll"><svg class="client-graph-svg" viewBox="0 0 ${width} ${height}" role="img" aria-label="Daily sent received and discarded quantities for ${escapeHtml(asset)}">
+            ${grid}<line x1="${left}" y1="${top+chartHeight}" x2="${width-right}" y2="${top+chartHeight}" class="graph-axis"></line>
+            <path d="${pathFor("sent")}" class="graph-line graph-line-sent" fill="none"></path>
+            <path d="${pathFor("received")}" class="graph-line graph-line-received" fill="none"></path>
+            ${points.some(([,v]) => v.discarded) ? `<path d="${pathFor("discarded")}" class="graph-line graph-line-discard" fill="none"></path>` : ""}
+            ${pointMarkup}${labels}</svg></div>`;
+    }
+
+    function renderWarehouseAssetQuantityGraph(asset, transactions, currentBalance) {
+        const graph = $("warehouse-asset-quantity-graph");
+        const daily = makeAssetHistorySeries(transactions);
+        if (!daily.length) {
+            graph.innerHTML = `<div class="client-graph-empty"><strong>No quantity history</strong><span>A quantity timeline needs transaction history for ${escapeHtml(asset)}.</span></div>`;
+            return;
+        }
+
+        // Reconstruct historical closing stock by anchoring the series to the
+        // current inventory balance and walking the ledger through time.
+        const totalNet = daily.reduce((sum, [, value]) => sum + value.received - value.sent - value.discarded, 0);
+        let running = currentBalance - totalNet;
+        const points = daily.map(([date, value]) => {
+            running += value.received - value.sent - value.discarded;
+            return [date, Math.max(0, running)];
+        });
+
+        const width = Math.max(720, points.length * 88);
+        const height = 320, left = 64, right = 28, top = 44, bottom = 62;
+        const chartWidth = width - left - right, chartHeight = height - top - bottom;
+        const maxValue = Math.max(...points.map(([, value]) => value), 1);
+        const xFor = i => points.length === 1 ? left + chartWidth / 2 : left + (i / (points.length - 1)) * chartWidth;
+        const yFor = value => top + chartHeight - (value / maxValue) * chartHeight;
+        const path = points.map(([, value], i) => `${i === 0 ? "M" : "L"} ${xFor(i).toFixed(1)} ${yFor(value).toFixed(1)}`).join(" ");
+        const yTicks = Array.from({length: 5}, (_, i) => maxValue * (1 - i / 4));
+        const grid = yTicks.map((value, i) => {
+            const y = top + chartHeight * i / 4;
+            return `<line x1="${left}" y1="${y}" x2="${width-right}" y2="${y}" class="graph-grid"></line><text x="${left-10}" y="${y+4}" text-anchor="end" class="graph-y-label">${formatNumber(Math.round(value))}</text>`;
+        }).join("");
+        const labels = points.map(([date], i) => `<text x="${xFor(i)}" y="${height-22}" text-anchor="middle" class="graph-label">${escapeHtml(formatGraphDate(date))}</text>`).join("");
+        const pointMarkup = points.map(([date, value], i) => {
+            const x = xFor(i), y = yFor(value);
+            return `<g><title>${escapeHtml(formatGraphDate(date))}: ${formatNumber(value)} quantity</title>
+                <circle cx="${x}" cy="${y}" r="5" class="graph-point-quantity"></circle>
+                <text x="${x}" y="${Math.max(16, y-12)}" text-anchor="middle" class="graph-value-label graph-value-quantity">${formatNumber(value)}</text>
+            </g>`;
+        }).join("");
+
+        graph.innerHTML = `<div class="client-graph-legend"><span class="graph-legend-item"><span class="graph-legend-dot graph-legend-quantity"></span>Closing quantity</span></div>
+        <div class="client-graph-scroll"><svg class="client-graph-svg" viewBox="0 0 ${width} ${height}" role="img" aria-label="Calculated quantity over time for ${escapeHtml(asset)}">
+            ${grid}<line x1="${left}" y1="${top+chartHeight}" x2="${width-right}" y2="${top+chartHeight}" class="graph-axis"></line>
+            <path d="${path}" class="graph-line graph-line-quantity" fill="none"></path>
+            ${pointMarkup}${labels}</svg></div>
+        <div class="asset-history-calculation-note">Calculated from the inventory balance and the recorded transaction ledger. It assumes the ledger contains the complete movement history for this asset.</div>`;
     }
 
 
