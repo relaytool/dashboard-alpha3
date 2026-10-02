@@ -75,13 +75,20 @@
     google.accounts.id.initialize({client_id:CONFIG.GOOGLE_CLIENT_ID,callback:handleCredentialResponse,auto_select:true,cancel_on_tap_outside:false});
     google.accounts.id.renderButton($("google-signin-button"),{theme:"outline",size:"large",text:"signin_with",shape:"rectangular",width:280});
     const saved=readSession();
-    if(saved){setUserProfile(saved);$("grant-access").classList.add("hidden");setStatus("Restoring your Sheets connection…");window.FM_CONNECTION_UI?.show("Connecting to Google Sheets…","Restoring your saved Google session.");attemptSilentAccess(saved.email);}
-    else {window.FM_CONNECTION_UI?.hide();google.accounts.id.prompt();}
+    if(saved){setUserProfile(saved);$("grant-access").classList.add("hidden");setStatus("Restoring your Sheets connection…");attemptSilentAccess(saved.email);}
+    else google.accounts.id.prompt();
   }
   function handleCredentialResponse(response){try{state.idTokenPayload=decodeJwtPayload(response.credential);saveSession();setUserProfile(state.idTokenPayload);requestAccess(true)}catch(e){console.error(e);setStatus("Google sign-in response could not be read.",true)}}
-  function requestAccess(silent=true){window.FM_CONNECTION_UI?.show(silent?"Connecting to Google Sheets…":"Authorising Google Sheets & Drive…",silent?"Restoring your saved connection.":"Approve access in the Google prompt to continue.");acquireAccessToken(silent?"none":"consent").then(async()=>{hideLogin();await loadPage();window.FM_CONNECTION_UI?.hide()}).catch(e=>{window.FM_CONNECTION_UI?.hide();$("grant-access").classList.remove("hidden");setStatus(e.message||"Google authorization failed.",true)})}
-  function attemptSilentAccess(email){window.FM_CONNECTION_UI?.show("Connecting to Google Sheets…","Checking your current Google authorisation.");acquireAccessToken("none",email).then(async()=>{hideLogin();await loadPage();window.FM_CONNECTION_UI?.hide()}).catch(()=>{window.FM_CONNECTION_UI?.hide();$("grant-access").classList.remove("hidden");setStatus("Your Google session is available. Allow Sheets & Drive access to continue.")})}
-  function acquireAccessToken(prompt="none",email,options={}){const forceRefresh=Boolean(options.forceRefresh);const expectedEmail=email||state.idTokenPayload?.email||readSession()?.email||"";if(!forceRefresh){const cached=window.FM_AUTH_CACHE?.read?.(expectedEmail);if(cached?.token){state.accessToken=cached.token;return Promise.resolve(cached.token)}}if(tokenRequestPromise)return tokenRequestPromise;tokenRequestPromise=new Promise((resolve,reject)=>{let settled=false;const finish=(fn,v)=>{if(settled)return;settled=true;tokenRequestPromise=null;clearTimeout(timeoutId);fn(v)};const timeoutId=setTimeout(()=>finish(reject,new Error("Google authorisation did not complete.")),prompt==="none"?5000:15000);const tc=google.accounts.oauth2.initTokenClient({client_id:CONFIG.GOOGLE_CLIENT_ID,scope:CONFIG.OAUTH_SCOPES,callback:r=>{if(r.error){finish(reject,new Error(`Google authorization failed: ${r.error}`));return}state.accessToken=r.access_token;window.FM_AUTH_CACHE?.write?.(r.access_token,r.expires_in,expectedEmail);finish(resolve,r.access_token)}});tc.requestAccessToken({prompt,login_hint:expectedEmail||undefined})});return tokenRequestPromise}
+  function requestAccess(silent=true){acquireAccessToken(silent?"none":"consent").then(async()=>{hideLogin();await loadPage()}).catch(e=>{$("grant-access").classList.remove("hidden");setStatus(e.message||"Google authorization failed.",true)})}
+  function attemptSilentAccess(email){acquireAccessToken("none",email).then(async()=>{hideLogin();await loadPage()}).catch(()=>{$("grant-access").classList.remove("hidden");setStatus("Google account restored. Allow Sheets & Drive access to continue.",true)})}
+  function acquireAccessToken(prompt="none",email){
+    const cached=window.FM_AUTH_CACHE?.read?.(readSession()?.email);
+    if(cached?.token){state.accessToken=cached.token;return Promise.resolve(cached.token);}
+    if(tokenRequestPromise)return tokenRequestPromise;
+    tokenRequestPromise=new Promise((resolve,reject)=>{let settled=false;const finish=(fn,v)=>{if(settled)return;settled=true;tokenRequestPromise=null;clearTimeout(timeoutId);fn(v)};const timeoutId=setTimeout(()=>finish(reject,new Error("Google authorization is taking too long. Please try again.")),prompt==="none"?7000:12000);const tc=google.accounts.oauth2.initTokenClient({client_id:CONFIG.GOOGLE_CLIENT_ID,scope:CONFIG.OAUTH_SCOPES,callback:r=>r.error?finish(reject,new Error(`Google authorization failed: ${r.error}`)):(state.accessToken=r.access_token,window.FM_AUTH_CACHE?.write?.(r.access_token,r.expires_in,email||state.idTokenPayload?.email||readSession()?.email),finish(resolve,r.access_token))});tc.requestAccessToken({prompt,login_hint:email||state.idTokenPayload?.email||readSession()?.email||undefined})});
+    return tokenRequestPromise;
+  }
+
   async function loadPage(){
     if(!state.accessToken)return;
     setSyncStatus("Refreshing live alerts...");
@@ -236,7 +243,7 @@
   async function sheetsGet(path){return fetchJson(SHEETS_API+path)}
   async function sheetsPost(path,body){return fetchJson(SHEETS_API+path,{method:"POST",headers:{...authHeaders(),"Content-Type":"application/json"},body:JSON.stringify(body)})}
   async function sheetsPut(path,body){return fetchJson(SHEETS_API+path,{method:"PUT",headers:{...authHeaders(),"Content-Type":"application/json"},body:JSON.stringify(body)})}
-  async function fetchJson(url,options={}){let r=await fetch(url,{...options,headers:{...authHeaders(),...(options.headers||{})}});if(r.status===401&&!options.__retried){try{await acquireAccessToken("none",state.idTokenPayload?.email||readSession()?.email,{forceRefresh:true});return fetchJson(url,{...options,__retried:true,headers:{...(options.headers||{}),...authHeaders()}})}catch(_){state.accessToken=null;window.FM_AUTH_CACHE?.clear?.();$("grant-access")?.classList.remove("hidden");throw new Error("Google Sheets access expired. Allow Sheets & Drive access to reconnect.")}}const t=await r.text();let d={};try{d=t?JSON.parse(t):{}}catch{}if(!r.ok)throw new Error(d.error?.message||`Request failed (${r.status})`);return d}
+  async function fetchJson(url,options={}){let r=await fetch(url,{...options,headers:{...authHeaders(),...(options.headers||{})}});const t=await r.text();let d={};try{d=t?JSON.parse(t):{}}catch{}if(!r.ok)throw new Error(d.error?.message||`Request failed (${r.status})`);return d}
   function authHeaders(){return{Authorization:`Bearer ${state.accessToken}`}}
   function quoteSheetName(name){return`'${String(name).replace(/'/g,"''")}'`}
   function columnLetter(n){let r="";while(n>0){const rem=(n-1)%26;r=String.fromCharCode(65+rem)+r;n=Math.floor((n-1)/26)}return r}
@@ -252,7 +259,4 @@
   function emptyRow(colspan,text){return`<tr><td colspan="${colspan}" class="empty">${escapeHtml(text)}</td></tr>`}
   function escapeHtml(s){return String(s??"").replace(/[&<>'"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[c]))}
   function escapeAttr(s){return escapeHtml(s)}
-  function refreshSavedSessionIfNeeded(){const saved=readSession();if(!saved||!window.google?.accounts?.oauth2)return;if(window.FM_AUTH_CACHE?.read?.(saved.email)?.token)return;attemptSilentAccess(saved.email)}
-  window.addEventListener("pageshow",refreshSavedSessionIfNeeded);
-  document.addEventListener("visibilitychange",()=>{if(!document.hidden)refreshSavedSessionIfNeeded()});
 })();

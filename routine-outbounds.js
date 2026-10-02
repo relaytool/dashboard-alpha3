@@ -58,8 +58,8 @@
     google.accounts.id.initialize({ client_id: CONFIG.GOOGLE_CLIENT_ID, callback: handleCredentialResponse, auto_select: true, cancel_on_tap_outside: false });
     google.accounts.id.renderButton($("google-signin-button"), { theme: "outline", size: "large", text: "signin_with", shape: "rectangular", width: 280 });
     const saved = readSession();
-    if (saved) { setUserProfile(saved); $("grant-access").classList.add("hidden"); setStatus("Restoring your Sheets connection…"); window.FM_CONNECTION_UI?.show("Connecting to Google Sheets…", "Restoring your saved Google session."); attemptSilentAccess(saved.email); }
-    else { window.FM_CONNECTION_UI?.hide(); google.accounts.id.prompt(); }
+    if (saved) { setUserProfile(saved); $("grant-access").classList.add("hidden"); setStatus("Restoring your Sheets connection…"); attemptSilentAccess(saved.email); }
+    else google.accounts.id.prompt();
   }
 
   function handleCredentialResponse(response) {
@@ -68,28 +68,31 @@
   }
 
   function requestAccess(silent = true) {
-    window.FM_CONNECTION_UI?.show(silent ? "Connecting to Google Sheets…" : "Authorising Google Sheets & Drive…", silent ? "Restoring your saved connection." : "Approve access in the Google prompt to continue.");
-    acquireAccessToken(silent ? "none" : "consent").then(async () => { hideLogin(); await loadPage(); window.FM_CONNECTION_UI?.hide(); }).catch(error => { window.FM_CONNECTION_UI?.hide(); $("grant-access").classList.remove("hidden"); setStatus(error.message || "Google authorization failed.", true); });
-  }
-  function attemptSilentAccess(email) {
-    window.FM_CONNECTION_UI?.show("Connecting to Google Sheets…", "Checking your current Google authorisation.");
-    acquireAccessToken("none", email).then(async () => { hideLogin(); await loadPage(); window.FM_CONNECTION_UI?.hide(); }).catch(() => { window.FM_CONNECTION_UI?.hide(); $("grant-access").classList.remove("hidden"); setStatus("Your Google session is available. Allow Sheets & Drive access to continue."); });
+    acquireAccessToken(silent ? "none" : "consent").then(async () => { hideLogin(); await loadPage(); }).catch(error => { $("grant-access").classList.remove("hidden"); setStatus(error.message || "Google authorization failed.", true); });
   }
 
-  function acquireAccessToken(prompt = "none", email, options = {}) {
-    const forceRefresh = Boolean(options.forceRefresh);
-    const expectedEmail = email || state.idTokenPayload?.email || readSession()?.email || "";
-    if (!forceRefresh) { const cached = window.FM_AUTH_CACHE?.read?.(expectedEmail); if (cached?.token) { state.accessToken = cached.token; return Promise.resolve(cached.token); } }
+  function attemptSilentAccess(email) {
+    acquireAccessToken("none", email).then(async () => { hideLogin(); await loadPage(); }).catch(() => { $("grant-access").classList.remove("hidden"); setStatus("Your Google session was restored. Click Connect Google Sheets only if the connection could not be restored automatically."); });
+  }
+
+  function acquireAccessToken(prompt = "none", email) {
+    const cached = window.FM_AUTH_CACHE?.read?.(readSession()?.email);
+    if (cached?.token) { state.accessToken = cached.token; return Promise.resolve(cached.token); }
     if (tokenRequestPromise) return tokenRequestPromise;
     tokenRequestPromise = new Promise((resolve, reject) => {
       let settled = false;
       const finish = (fn, value) => { if (settled) return; settled = true; tokenRequestPromise = null; clearTimeout(timeoutId); fn(value); };
-      const timeoutId = setTimeout(() => finish(reject, new Error("Google authorisation did not complete.")), prompt === "none" ? 5000 : 15000);
-      const client = google.accounts.oauth2.initTokenClient({ client_id: CONFIG.GOOGLE_CLIENT_ID, scope: CONFIG.OAUTH_SCOPES, callback: response => {
-        if (response.error) { finish(reject, new Error(`Google authorization failed: ${response.error}`)); return; }
-        state.accessToken = response.access_token; window.FM_AUTH_CACHE?.write?.(response.access_token, response.expires_in, expectedEmail); finish(resolve, response.access_token);
-      }});
-      client.requestAccessToken({ prompt, login_hint: expectedEmail || undefined });
+      const timeoutId = setTimeout(() => finish(reject, new Error("Google authorization is taking too long. Please try again.")), prompt === "none" ? 7000 : 12000);
+      const client = google.accounts.oauth2.initTokenClient({
+        client_id: CONFIG.GOOGLE_CLIENT_ID, scope: CONFIG.OAUTH_SCOPES,
+        callback: response => {
+          if (response.error) { finish(reject, new Error(`Google authorization failed: ${response.error}`)); return; }
+          state.accessToken = response.access_token;
+          window.FM_AUTH_CACHE?.write?.(response.access_token, response.expires_in, email || state.idTokenPayload?.email || readSession()?.email);
+          finish(resolve, response.access_token);
+        }
+      });
+      client.requestAccessToken({ prompt, login_hint: email || state.idTokenPayload?.email || readSession()?.email || undefined });
     });
     return tokenRequestPromise;
   }
@@ -224,7 +227,4 @@
   function setSyncStatus(text,error=false){const el=$("sync-status");if(el){el.textContent=text;el.className=`muted ${error?"error":""}`;}}
   function escapeHtml(s){return String(s??"").replace(/[&<>'"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[c]));}
   function escapeAttr(s){return escapeHtml(s);}
-  function refreshSavedSessionIfNeeded(){const saved=readSession();if(!saved||!window.google?.accounts?.oauth2)return;if(window.FM_AUTH_CACHE?.read?.(saved.email)?.token)return;attemptSilentAccess(saved.email)}
-  window.addEventListener("pageshow",refreshSavedSessionIfNeeded);
-  document.addEventListener("visibilitychange",()=>{if(!document.hidden)refreshSavedSessionIfNeeded()});
 })();

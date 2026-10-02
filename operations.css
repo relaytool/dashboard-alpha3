@@ -136,10 +136,3 @@
 #info-photo.is-loading{min-height:130px;opacity:.5}
 
 .alert-metrics-client{grid-template-columns:repeat(2,minmax(0,1fr))}
-
-/* Dark theme bridge for Alerts and Routine pages (dashboard.css supplies the base). */
-.ops-page .ops-stat,.ops-page .ops-panel,.ops-page .ops-toolbar-card,.ops-page .alert-card-grid,.ops-page .alert-controls,.ops-page .ops-note,.ops-page .investigate-summary,.ops-page .ops-modal-card{background:#11111a!important;border-color:#2a273b!important;color:#f7f4ff!important}
-.ops-page .alert-card,.ops-page .investigate-summary-item,.ops-page .ops-stat{background:#151520!important;border-color:#2a273b!important}
-.ops-page .alert-filter{background:#181724!important;color:#c8c2d6!important;border-color:#38324f!important}.ops-page .alert-filter.active{background:#8b5cf6!important;color:#fff!important;border-color:#8b5cf6!important}
-.ops-page input,.ops-page select,.ops-page textarea{background:#0f0f17!important;border-color:#38324f!important;color:#f7f4ff!important}
-.ops-page .connection-loading{background:rgba(5,5,10,.82)!important}

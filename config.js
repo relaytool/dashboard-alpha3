@@ -124,34 +124,6 @@ window.FM_AUTH_CACHE = window.FM_AUTH_CACHE || (() => {
     return {read,write,clear};
 })();
 
-/* Shared connection/loading UI. Pages use the same helper so Sheets connection
-   feedback behaves consistently on desktop, Android Chrome and iOS/iPadOS Safari PWAs. */
-window.FM_CONNECTION_UI = window.FM_CONNECTION_UI || (() => {
-    function overlay(){ return document.getElementById("connection-loading"); }
-    function title(){ return document.getElementById("connection-loading-title"); }
-    function detail(){ return document.getElementById("connection-loading-detail"); }
-    function show(message="Connecting to Google Sheets…", sub="Checking your saved Google connection."){
-        const node=overlay();
-        if(!node) return;
-        if(title()) title().textContent=message;
-        if(detail()) detail().textContent=sub;
-        node.classList.remove("hidden");
-        node.setAttribute("aria-hidden","false");
-        document.documentElement.classList.add("fm-connection-active");
-    }
-    function hide(){
-        const node=overlay();
-        if(node){ node.classList.add("hidden"); node.setAttribute("aria-hidden","true"); }
-        document.documentElement.classList.remove("fm-connection-active");
-    }
-    function text(message,sub){ if(title()) title().textContent=message||"Connecting to Google Sheets…"; if(detail()) detail().textContent=sub||""; }
-    return {show,hide,text};
-})();
-
-window.addEventListener("pageshow", () => {
-    document.documentElement.classList.remove("fm-connection-active");
-});
-
 /* Shared media helpers used by the dashboard, movement logger and alerts. */
 window.FM_MEDIA = window.FM_MEDIA || (() => {
     const DRIVE_API = "https://www.googleapis.com/drive/v3/files";
