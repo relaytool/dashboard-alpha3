@@ -1630,6 +1630,15 @@ function bindQuickMenu() {
     }
 
 
+    function niceGraphMax(value, segments = 4) {
+        const maximum = Math.max(Number(value) || 0, 1);
+        const roughStep = maximum / segments;
+        const magnitude = Math.pow(10, Math.floor(Math.log10(roughStep)));
+        const normalized = roughStep / magnitude;
+        const niceNormalized = normalized <= 1 ? 1 : normalized <= 2 ? 2 : normalized <= 5 ? 5 : 10;
+        return niceNormalized * magnitude * segments;
+    }
+
     function renderClientAssetGraph(
         client,
         asset
@@ -1737,11 +1746,12 @@ function bindQuickMenu() {
         const chartWidth = width - left - right;
         const chartHeight = height - top - bottom;
 
-        const maxValue =
+        const rawMaxValue =
             Math.max(
                 ...points.flatMap(([, value]) => [value.sent, value.received]),
                 1
             );
+        const maxValue = niceGraphMax(rawMaxValue, 4);
 
         const yTicks = 4;
         const yGrid = Array.from(
@@ -1812,18 +1822,22 @@ function bindQuickMenu() {
                 const sentY = yFor(value.sent);
                 const receivedY = yFor(value.received);
                 const label = formatGraphDate(date);
-                const sentLabelY = Math.max(16, sentY - 12);
-                const receivedLabelY = Math.min(height - 34, receivedY + 22);
+                const sentLabelY = Math.max(top + 12, sentY - 16);
+                const receivedLabelY = Math.min(top + chartHeight - 4, receivedY + 26);
+                const sentText = formatNumber(value.sent);
+                const receivedText = formatNumber(value.received);
+                const sentWidth = Math.max(24, sentText.length * 7 + 10);
+                const receivedWidth = Math.max(24, receivedText.length * 7 + 10);
 
                 return `
                     <g>
-                        <title>
-                            ${escapeHtml(label)}: ${formatNumber(value.sent)} sent, ${formatNumber(value.received)} received
-                        </title>
+                        <title>${escapeHtml(label)}: ${sentText} sent, ${receivedText} received</title>
                         <circle cx="${x.toFixed(1)}" cy="${sentY.toFixed(1)}" r="4.5" class="graph-point-sent"></circle>
                         <circle cx="${x.toFixed(1)}" cy="${receivedY.toFixed(1)}" r="4.5" class="graph-point-received"></circle>
-                        <text x="${x.toFixed(1)}" y="${sentLabelY.toFixed(1)}" text-anchor="middle" class="graph-value-label graph-value-sent">${formatNumber(value.sent)}</text>
-                        <text x="${x.toFixed(1)}" y="${receivedLabelY.toFixed(1)}" text-anchor="middle" class="graph-value-label graph-value-received">${formatNumber(value.received)}</text>
+                        <rect x="${(x - sentWidth / 2).toFixed(1)}" y="${(sentLabelY - 10).toFixed(1)}" width="${sentWidth}" height="16" rx="8" class="graph-value-chip graph-value-chip-sent"></rect>
+                        <text x="${x.toFixed(1)}" y="${(sentLabelY + 2).toFixed(1)}" text-anchor="middle" class="graph-value-label graph-value-sent">${sentText}</text>
+                        <rect x="${(x - receivedWidth / 2).toFixed(1)}" y="${(receivedLabelY - 10).toFixed(1)}" width="${receivedWidth}" height="16" rx="8" class="graph-value-chip graph-value-chip-received"></rect>
+                        <text x="${x.toFixed(1)}" y="${(receivedLabelY + 2).toFixed(1)}" text-anchor="middle" class="graph-value-label graph-value-received">${receivedText}</text>
                     </g>
                 `;
             }
@@ -2664,6 +2678,18 @@ function bindQuickMenu() {
                 </div>
             </div>`;
         }).join("");
+
+        // Bind directly to the freshly-rendered cards as a second layer of protection
+        // against delegated-event issues after dashboard re-renders.
+        container.querySelectorAll("[data-asset-name]").forEach(card => {
+            const open = () => openWarehouseAssetDetails(card.dataset.assetName);
+            card.addEventListener("click", open);
+            card.addEventListener("keydown", event => {
+                if (event.key !== "Enter" && event.key !== " " ) return;
+                event.preventDefault();
+                open();
+            });
+        });
     }
 
 
@@ -2681,6 +2707,9 @@ function bindQuickMenu() {
         const name = String(asset || "").trim();
         if (!name) return;
 
+        const modal = $("warehouse-asset-modal");
+        if (!modal) return;
+
         const inventory = getDashboardInventory().find(item =>
             String(item.asset || "").trim().toLowerCase() === name.toLowerCase()
         );
@@ -2688,6 +2717,8 @@ function bindQuickMenu() {
         const transactions = getWarehouseAssetTransactions(name);
         const filters = getDashboardFilters();
 
+        // Open the modal first. Heavy graph work must never block the modal from appearing.
+        modal.classList.remove("hidden");
         $("warehouse-asset-modal-title").textContent = name;
         $("warehouse-asset-modal-subtitle").textContent = filters.client
             ? `Warehouse quantity and movements for ${name} · client filter: ${filters.client}`
@@ -2707,9 +2738,25 @@ function bindQuickMenu() {
             <div class="warehouse-history-stat"><span>Discarded</span><strong>${formatNumber(discarded)}</strong></div>
         `;
 
-        renderWarehouseAssetMovementGraph(name, transactions);
-        renderWarehouseAssetQuantityGraph(name, transactions, balance);
-        $("warehouse-asset-modal").classList.remove("hidden");
+        const movementGraph = $("warehouse-asset-movement-graph");
+        const quantityGraph = $("warehouse-asset-quantity-graph");
+        movementGraph.innerHTML = `<div class="graph-loading-state">Preparing movement history…</div>`;
+        quantityGraph.innerHTML = `<div class="graph-loading-state">Preparing quantity history…</div>`;
+
+        requestAnimationFrame(() => {
+            try {
+                renderWarehouseAssetMovementGraph(name, transactions);
+            } catch (error) {
+                console.error("Asset movement graph failed:", error);
+                movementGraph.innerHTML = `<div class="client-graph-empty"><strong>Movement graph unavailable</strong><span>The asset details are still available above.</span></div>`;
+            }
+            try {
+                renderWarehouseAssetQuantityGraph(name, transactions, balance);
+            } catch (error) {
+                console.error("Asset quantity graph failed:", error);
+                quantityGraph.innerHTML = `<div class="client-graph-empty"><strong>Quantity graph unavailable</strong><span>The asset details are still available above.</span></div>`;
+            }
+        });
     }
 
     function closeWarehouseAssetDetails() {
@@ -2743,7 +2790,7 @@ function bindQuickMenu() {
         const width = Math.max(720, points.length * 88);
         const height = 320, left = 64, right = 28, top = 44, bottom = 62;
         const chartWidth = width - left - right, chartHeight = height - top - bottom;
-        const maxValue = Math.max(...points.flatMap(([, value]) => [value.sent, value.received, value.discarded]), 1);
+        const maxValue = niceGraphMax(Math.max(...points.flatMap(([, value]) => [value.sent, value.received, value.discarded]), 1), 4);
         const xFor = i => points.length === 1 ? left + chartWidth / 2 : left + (i / (points.length - 1)) * chartWidth;
         const yFor = value => top + chartHeight - (value / maxValue) * chartHeight;
         const pathFor = key => points.map(([, value], i) => `${i === 0 ? "M" : "L"} ${xFor(i).toFixed(1)} ${yFor(value[key]).toFixed(1)}`).join(" ");
@@ -2797,7 +2844,7 @@ function bindQuickMenu() {
         const width = Math.max(720, points.length * 88);
         const height = 320, left = 64, right = 28, top = 44, bottom = 62;
         const chartWidth = width - left - right, chartHeight = height - top - bottom;
-        const maxValue = Math.max(...points.map(([, value]) => value), 1);
+        const maxValue = niceGraphMax(Math.max(...points.map(([, value]) => value), 1), 4);
         const xFor = i => points.length === 1 ? left + chartWidth / 2 : left + (i / (points.length - 1)) * chartWidth;
         const yFor = value => top + chartHeight - (value / maxValue) * chartHeight;
         const path = points.map(([, value], i) => `${i === 0 ? "M" : "L"} ${xFor(i).toFixed(1)} ${yFor(value).toFixed(1)}`).join(" ");

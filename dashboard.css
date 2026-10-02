@@ -3506,3 +3506,18 @@ td{border-top-color:#e7ebf0!important;color:#273244!important}
 .graph-legend-quantity{background:#111827!important}
 .asset-history-calculation-note{margin-top:10px;padding:10px 12px;border-radius:10px;background:#f8fafc;color:#667085;font-size:12px;line-height:1.45}
 @media(max-width:760px){.warehouse-asset-history-summary{grid-template-columns:repeat(2,minmax(0,1fr));padding:0 16px 14px}.warehouse-history-stat strong{font-size:20px}.asset-history-graph-section{margin-left:0;margin-right:0}}
+
+
+/* Final interaction/readability fixes */
+#login-card{background:#ffffff!important;color:#17202a!important;border:1px solid #dfe5ec!important;box-shadow:0 8px 30px rgba(15,23,42,.06)!important}
+#login-card .muted,#login-card #auth-status{color:#5f6b7a!important}
+#login-card .google-signin-button,#login-card #google-signin-button{background:#ffffff!important;color:#17202a!important}
+#login-card input,#login-card select,#login-card button{background:#ffffff!important;color:#17202a!important}
+.graph-value-chip{paint-order:stroke fill!important;stroke-width:1px!important}
+.graph-value-chip-sent{fill:#eef4ff!important;stroke:#b8d0ff!important}
+.graph-value-chip-received{fill:#fff0f0!important;stroke:#f2b8b8!important}
+.graph-value-label{font-size:10px!important;font-weight:850!important;dominant-baseline:middle!important}
+.graph-value-sent{fill:#174ea6!important}
+.graph-value-received{fill:#a61b1b!important}
+.graph-loading-state{display:flex;align-items:center;justify-content:center;min-height:150px;color:#667085;font-size:13px}
+.warehouse-asset-card{cursor:pointer!important}
