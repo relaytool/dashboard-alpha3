@@ -1,5 +1,13 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1"><meta name="theme-color" content="#f5f7fa"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="default"><title>FM Asset Movement Logger</title><link rel="stylesheet" href="movement-logger.css?v=20260927-optimized-v3">
-</head><body><main class="app-shell">
+<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1"><meta name="theme-color" content="#09090f"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><title>FM Asset Movement Logger</title><link rel="stylesheet" href="movement-logger.css?v=20261002-dark-v1">
+</head><body>
+<div id="connection-loading" class="connection-loading hidden" role="status" aria-live="polite" aria-hidden="true">
+  <div class="connection-loading-card">
+    <span class="loading-spinner" aria-hidden="true"></span>
+    <strong id="connection-loading-title">Connecting to Google Sheets…</strong>
+    <span id="connection-loading-detail">Checking your saved Google connection.</span>
+  </div>
+</div>
+<main class="app-shell">
 <header class="topbar"><div><div class="eyebrow">FM OPERATIONS</div><h1>Asset Movement</h1><p class="muted">Record multiple asset types for a client in one entry.</p></div><div class="account-area"><img id="user-photo" class="user-photo hidden" alt="User"><div><div id="user-name" class="user-name">Not signed in</div><div id="user-email" class="muted"></div></div><button id="sign-out" class="secondary hidden">Sign out</button></div></header>
 <nav class="quick-nav" aria-label="Quick links">
     <button type="button" id="menu-toggle" class="menu-toggle" aria-expanded="false" aria-controls="quick-links">
@@ -47,4 +55,4 @@
       async
       defer
       onload="window.dispatchEvent(new Event('fm-google-loaded'))"
-    ></script><script src="config.js?v=20260927-optimized-v3"></script><script src="movement-logger.js?v=20260927-optimized-v3"></script></body></html>
+    ></script><script src="config.js?v=20261002-dark-v1"></script><script src="movement-logger.js?v=20261002-dark-v1"></script></body></html>

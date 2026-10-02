@@ -141,8 +141,9 @@
     const saved=readSavedSession();
     if(saved){
       setUserProfile(saved);
-      $("grant-access").classList.remove("hidden");
+      $("grant-access").classList.add("hidden");
       setAuthStatus("Google account restored. Connecting to Sheets...");
+      window.FM_CONNECTION_UI?.show("Connecting to Google Sheets…", "Restoring your saved Google session.");
       attemptSilentAccess(saved.email);
     }
     google.accounts.id.prompt();
@@ -155,7 +156,8 @@
       saveSession();
       setUserProfile(payload);
       $("grant-access").classList.remove("hidden");
-      setAuthStatus("Signed in. Connect Google Sheets to continue.");
+      setAuthStatus("Signed in. Connecting to Google Sheets…");
+      window.FM_CONNECTION_UI?.show("Connecting to Google Sheets…", "Requesting access for the movement logger.");
       attemptSilentAccess(payload.email);
     }catch(e){
       console.error(e);
@@ -168,41 +170,69 @@
       setAuthStatus("Sign in with Google first.",true);
       return;
     }
+    window.FM_CONNECTION_UI?.show(silent?"Connecting to Google Sheets…":"Authorising Google Sheets & Drive…",silent?"Restoring your saved connection.":"Approve access in the Google prompt to continue.");
     acquireAccessToken(silent?"none":"consent")
-      .then(async()=>{hideLogin();await loadLogger();})
+      .then(async()=>{hideLogin();await loadLogger();window.FM_CONNECTION_UI?.hide();if(pendingMovement)$('confirm-modal').classList.remove('hidden');})
       .catch(e=>{
+        window.FM_CONNECTION_UI?.hide();
         $("grant-access").classList.remove("hidden");
-        if(silent){
-          setAuthStatus("Google account restored. Connect Google Sheets to continue.");
-        }else{
-          setAuthStatus(e?.message||"Google authorization failed. Click Connect Google Sheets to try again.",true);
-        }
+        if(silent){setAuthStatus("Your Google session is available. Allow Sheets & Drive access to continue.");}
+        else{setAuthStatus(e?.message||"Google authorization failed. Tap Connect Google Sheets to try again.",true);}
       });
   }
-
   function attemptSilentAccess(email){
+    window.FM_CONNECTION_UI?.show("Connecting to Google Sheets…","Checking your current Google authorisation.");
     acquireAccessToken("none",email)
-      .then(async()=>{hideLogin();await loadLogger();})
+      .then(async()=>{hideLogin();await loadLogger();window.FM_CONNECTION_UI?.hide();})
       .catch(()=>{
+        window.FM_CONNECTION_UI?.hide();
         $("grant-access").classList.remove("hidden");
-        setAuthStatus("Google account restored. Allow Sheets & Drive access to continue.");
+        setAuthStatus("Your Google session is available. Allow Sheets & Drive access to continue.");
       });
   }
 
-  function acquireAccessToken(prompt="none",email){
-    const cached=window.FM_AUTH_CACHE?.read?.(readSavedSession()?.email);
-    if(cached?.token){state.accessToken=cached.token;return Promise.resolve(cached.token);}
+  function acquireAccessToken(prompt="none",email,options={}){
+    const forceRefresh=Boolean(options.forceRefresh);
+    const expectedEmail=email||state.idTokenPayload?.email||readSavedSession()?.email||"";
+    if(!forceRefresh){
+      const cached=window.FM_AUTH_CACHE?.read?.(expectedEmail);
+      if(cached?.token){state.accessToken=cached.token;return Promise.resolve(cached.token);}
+    }
     if(tokenRequestPromise)return tokenRequestPromise;
     tokenRequestPromise=new Promise((resolve,reject)=>{
       let settled=false;
       const finish=(fn,value)=>{if(settled)return;settled=true;tokenRequestPromise=null;clearTimeout(timeoutId);fn(value);};
-      const timeoutMs=prompt==="none"?7000:12000;
-      const timeoutId=setTimeout(()=>finish(reject,new Error("Google authorization is taking too long. Please use Connect Google Sheets again.")),timeoutMs);
-      const tokenClient=google.accounts.oauth2.initTokenClient({client_id:CONFIG.GOOGLE_CLIENT_ID,scope:CONFIG.OAUTH_SCOPES,callback:response=>{if(response.error){finish(reject,new Error(`Google authorization failed: ${response.error}`));return;}state.accessToken=response.access_token;window.FM_AUTH_CACHE?.write?.(response.access_token,response.expires_in,email||state.idTokenPayload?.email||readSavedSession()?.email);finish(resolve,response.access_token);}});
-      tokenClient.requestAccessToken({prompt,login_hint:email||state.idTokenPayload?.email||readSavedSession()?.email||undefined});
+      const timeoutId=setTimeout(()=>finish(reject,new Error("Google authorisation did not complete.")),prompt==="none"?5000:15000);
+      const tokenClient=google.accounts.oauth2.initTokenClient({client_id:CONFIG.GOOGLE_CLIENT_ID,scope:CONFIG.OAUTH_SCOPES,callback:response=>{
+        if(response.error){finish(reject,new Error(`Google authorization failed: ${response.error}`));return;}
+        state.accessToken=response.access_token;
+        window.FM_AUTH_CACHE?.write?.(response.access_token,response.expires_in,expectedEmail);
+        finish(resolve,response.access_token);
+      }});
+      tokenClient.requestAccessToken({prompt,login_hint:expectedEmail||undefined});
     });
     return tokenRequestPromise;
   }
+
+  async function ensureWriteAccess(){
+    const email=state.idTokenPayload?.email||readSavedSession()?.email||"";
+    const cached=window.FM_AUTH_CACHE?.read?.(email);
+    if(cached?.token){state.accessToken=cached.token;return true;}
+    try{
+      window.FM_CONNECTION_UI?.show("Checking Google access…","Refreshing access before saving this movement.");
+      await acquireAccessToken("none",email,{forceRefresh:true});
+      window.FM_CONNECTION_UI?.hide();
+      return true;
+    }catch(e){
+      try{
+        window.FM_CONNECTION_UI?.show("Google permission needed","Approve the Google access prompt to finish saving this movement.");
+        await acquireAccessToken("consent",email,{forceRefresh:true});
+        window.FM_CONNECTION_UI?.hide();
+        return true;
+      }catch(err){window.FM_CONNECTION_UI?.hide();throw err;}
+    }
+  }
+
   async function loadLogger(){
     if(!state.accessToken)return false;
     setSyncStatus("Syncing with Google Sheets...");
@@ -461,6 +491,17 @@
     const data=pendingMovement;
     movementSubmitBusy=true;
     $("approve-confirm").disabled=true;$("cancel-confirm").disabled=true;
+    setMovementSubmitting(true,"Checking Google access...");
+    try{
+      await ensureWriteAccess();
+    }catch(authError){
+      movementSubmitBusy=false;
+      setMovementSubmitting(false);
+      $("approve-confirm").disabled=false;$("cancel-confirm").disabled=false;
+      showReconnectUI("Google access expired. Allow Sheets & Drive access, then approve the movement again.");
+      setMovementStatus(authError.message||"Google access could not be refreshed.",true);
+      return;
+    }
     setMovementSubmitting(true,data.photoFile?"Uploading photo...":"Recording movement...");
     setMovementStatus("Recording movements...");
     try{
@@ -537,12 +578,12 @@
     let response=await fetch(url,options);
     if(response.status===401&&!options.__retried){
       try{
-        await acquireAccessToken("none",state.idTokenPayload?.email||readSavedSession()?.email);
+        await acquireAccessToken("none",state.idTokenPayload?.email||readSavedSession()?.email,{forceRefresh:true});
         const retry={...options,__retried:true,headers:{...(options.headers||{}),...authHeaders()}};
         return fetchJson(url,retry);
       }catch(e){
-        state.accessToken=null;
-        throw new Error("Google access expired. Click Connect Google Sheets to reconnect.");
+        state.accessToken=null;window.FM_AUTH_CACHE?.clear?.();showReconnectUI("Google access expired. Allow Sheets & Drive access to reconnect.");
+        throw new Error("Google access expired. Allow Sheets & Drive access to reconnect.");
       }
     }
     const text=await response.text();
@@ -579,6 +620,17 @@
     $("logger").classList.remove("hidden");
   }
 
+  function showReconnectUI(message="Google access expired. Allow Sheets & Drive access to continue."){
+    window.FM_CONNECTION_UI?.hide();
+    $("confirm-modal")?.classList.add("hidden");
+    $("login-card")?.classList.remove("hidden");
+    $("google-signin-button")?.classList.add("hidden");
+    $("grant-access")?.classList.remove("hidden");
+    const title=$("login-card")?.querySelector("h2");
+    if(title)title.textContent="Reconnect Google Sheets";
+    setAuthStatus(message,true);
+  }
+
   function signOut(){
     const saved=readSavedSession();
     if(state.idTokenPayload?.sub){try{google.accounts.id.revoke(state.idTokenPayload.sub,()=>{});}catch(_){}}
@@ -602,6 +654,15 @@
     $("user-email").textContent="";
     setAuthStatus("");
   }
+
+  function refreshSavedSessionIfNeeded(){
+    const saved=readSavedSession();
+    if(!saved||!window.google?.accounts?.oauth2)return;
+    if(window.FM_AUTH_CACHE?.read?.(saved.email)?.token)return;
+    attemptSilentAccess(saved.email);
+  }
+  window.addEventListener("pageshow",refreshSavedSessionIfNeeded);
+  document.addEventListener("visibilitychange",()=>{if(!document.hidden)refreshSavedSessionIfNeeded();});
 
   // Keep this helper available to any older dashboard/logger code that calls it globally.
   window.formatTimestamp = formatTimestamp;

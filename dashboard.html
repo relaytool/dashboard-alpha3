@@ -2,14 +2,25 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#09090f">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 
     <title>FM Assets Dashboard</title>
 
-    <link rel="stylesheet" href="dashboard.css?v=20260927-optimized-v3">
+    <link rel="stylesheet" href="dashboard.css?v=20261002-dark-v1">
 </head>
 
 <body>
+<div id="connection-loading" class="connection-loading hidden" role="status" aria-live="polite" aria-hidden="true">
+  <div class="connection-loading-card">
+    <span class="loading-spinner" aria-hidden="true"></span>
+    <strong id="connection-loading-title">Connecting to Google Sheets…</strong>
+    <span id="connection-loading-detail">Checking your saved Google connection.</span>
+  </div>
+</div>
+
 
 <main class="app-shell">
 
@@ -861,9 +872,9 @@
       onload="window.dispatchEvent(new Event('fm-google-loaded'))"
     ></script>
 
-<script src="config.js?v=20260927-optimized-v3"></script>
-<script src="routine-alert-utils.js?v=20260927-optimized-v3"></script>
-<script src="dashboard.js?v=20260927-optimized-v3"></script>
+<script src="config.js?v=20261002-dark-v1"></script>
+<script src="routine-alert-utils.js?v=20261002-dark-v1"></script>
+<script src="dashboard.js?v=20261002-dark-v1"></script>
 
 </body>
 </html>

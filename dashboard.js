@@ -494,8 +494,10 @@ function bindQuickMenu() {
             setUserProfile(saved);
             $("grant-access").classList.add("hidden");
             setAuthStatus("Restoring your Sheets connection…");
+            window.FM_CONNECTION_UI?.show("Connecting to Google Sheets…", "Restoring your saved Google session.");
             attemptSilentAccess(saved.email);
         } else {
+            window.FM_CONNECTION_UI?.hide();
             google.accounts.id.prompt();
         }
     }
@@ -507,7 +509,8 @@ function bindQuickMenu() {
             saveSession();
             setUserProfile(state.idTokenPayload);
             $("grant-access").classList.remove("hidden");
-            setAuthStatus("Signed in. Connect Google Sheets to load the dashboard.");
+            setAuthStatus("Signed in. Connecting to Google Sheets…");
+            window.FM_CONNECTION_UI?.show("Connecting to Google Sheets…", "Requesting access for this dashboard.");
             attemptSilentAccess(state.idTokenPayload.email);
         } catch (error) {
             console.error(error);
@@ -522,41 +525,54 @@ function bindQuickMenu() {
             return;
         }
 
+        window.FM_CONNECTION_UI?.show(
+            silent ? "Connecting to Google Sheets…" : "Authorising Google Sheets & Drive…",
+            silent ? "Restoring your saved connection." : "Approve access in the Google prompt, then the dashboard will continue automatically."
+        );
         acquireAccessToken(silent ? "none" : "consent")
             .then(async () => {
                 hideLogin();
                 await loadDashboard();
+                window.FM_CONNECTION_UI?.hide();
             })
             .catch(error => {
+                window.FM_CONNECTION_UI?.hide();
                 $("grant-access").classList.remove("hidden");
                 if (silent) {
-                    setAuthStatus("Google account restored. Connect Google Sheets to continue.");
+                    setAuthStatus("Your Google account is signed in. Allow Sheets & Drive access to continue.");
                 } else {
-                    setAuthStatus(error.message || "Google authorization failed. Click Connect Google Sheets to try again.", true);
+                    setAuthStatus(error.message || "Google authorization failed. Tap Allow Sheets & Drive access to try again.", true);
                 }
             });
     }
 
 
     function attemptSilentAccess(email) {
+        window.FM_CONNECTION_UI?.show("Connecting to Google Sheets…", "Checking your current Google authorisation.");
         acquireAccessToken("none", email)
             .then(async () => {
                 hideLogin();
                 await loadDashboard();
+                window.FM_CONNECTION_UI?.hide();
             })
             .catch((error) => {
-      console.warn("Silent Google Sheets/Drive authorization failed:", error);
+                console.warn("Silent Google Sheets/Drive authorization failed:", error);
+                window.FM_CONNECTION_UI?.hide();
                 $("grant-access").classList.remove("hidden");
-                setAuthStatus("Google account restored. Allow Sheets & Drive access to continue.");
+                setAuthStatus("Your Google session is available. Allow Sheets & Drive access to continue.");
             });
     }
 
 
-    function acquireAccessToken(prompt = "none", email) {
-        const cached = window.FM_AUTH_CACHE?.read?.(readSavedSession()?.email);
-        if (cached?.token) {
-            state.accessToken = cached.token;
-            return Promise.resolve(cached.token);
+    function acquireAccessToken(prompt = "none", email, options = {}) {
+        const forceRefresh = Boolean(options.forceRefresh);
+        const expectedEmail = email || state.idTokenPayload?.email || readSavedSession()?.email || "";
+        if (!forceRefresh) {
+            const cached = window.FM_AUTH_CACHE?.read?.(expectedEmail);
+            if (cached?.token) {
+                state.accessToken = cached.token;
+                return Promise.resolve(cached.token);
+            }
         }
         if (tokenRequestPromise) return tokenRequestPromise;
         tokenRequestPromise = new Promise((resolve, reject) => {
@@ -568,26 +584,51 @@ function bindQuickMenu() {
                 clearTimeout(timeoutId);
                 fn(value);
             };
-            const timeoutMs = prompt === "none" ? 7000 : 12000;
-            const timeoutId = setTimeout(() => finish(reject, new Error("Google authorization is taking too long. Please use Connect Google Sheets again.")), timeoutMs);
+            const timeoutMs = prompt === "none" ? 3000 : 15000;
+            const timeoutId = setTimeout(() => finish(reject, new Error("Google authorisation did not complete.")), timeoutMs);
             const tokenClient = google.accounts.oauth2.initTokenClient({
                 client_id: CONFIG.GOOGLE_CLIENT_ID,
                 scope: CONFIG.OAUTH_SCOPES,
                 callback: response => {
                     if (response.error) { finish(reject, new Error(`Google authorization failed: ${response.error}`)); return; }
                     state.accessToken = response.access_token;
-                    window.FM_AUTH_CACHE?.write?.(response.access_token, response.expires_in, email || state.idTokenPayload?.email || readSavedSession()?.email);
+                    window.FM_AUTH_CACHE?.write?.(response.access_token, response.expires_in, expectedEmail);
                     finish(resolve, response.access_token);
                 }
             });
             tokenClient.requestAccessToken({
                 prompt,
-                login_hint: email || state.idTokenPayload?.email || readSavedSession()?.email || undefined
+                login_hint: expectedEmail || undefined
             });
         });
         return tokenRequestPromise;
     }
 
+    async function ensureWriteAccess() {
+        const email = state.idTokenPayload?.email || readSavedSession()?.email || "";
+        const cached = window.FM_AUTH_CACHE?.read?.(email);
+        if (cached?.token) {
+            state.accessToken = cached.token;
+            return true;
+        }
+        try {
+            window.FM_CONNECTION_UI?.show("Checking Google access…", "Refreshing access before saving this movement.");
+            await acquireAccessToken("none", email, {forceRefresh: true});
+            window.FM_CONNECTION_UI?.hide();
+            return true;
+        } catch (silentError) {
+            console.warn("Silent token refresh failed before movement save:", silentError);
+            try {
+                window.FM_CONNECTION_UI?.show("Google permission needed", "Approve the Google access prompt to finish saving this movement.");
+                await acquireAccessToken("consent", email, {forceRefresh: true});
+                window.FM_CONNECTION_UI?.hide();
+                return true;
+            } catch (consentError) {
+                window.FM_CONNECTION_UI?.hide();
+                throw consentError;
+            }
+        }
+    }
 
     async function loadDashboard() {
 
@@ -1748,25 +1789,21 @@ function bindQuickMenu() {
         const pointsMarkup = points.map(
             ([date, value], index) => {
                 const x = xFor(index);
+                const sentY = yFor(value.sent);
+                const receivedY = yFor(value.received);
                 const label = formatGraphDate(date);
+                const sentLabelY = Math.max(16, sentY - 12);
+                const receivedLabelY = Math.min(height - 34, receivedY + 22);
 
                 return `
                     <g>
                         <title>
                             ${escapeHtml(label)}: ${formatNumber(value.sent)} sent, ${formatNumber(value.received)} received
                         </title>
-                        <circle
-                            cx="${x.toFixed(1)}"
-                            cy="${yFor(value.sent).toFixed(1)}"
-                            r="4"
-                            class="graph-point-sent"
-                        ></circle>
-                        <circle
-                            cx="${x.toFixed(1)}"
-                            cy="${yFor(value.received).toFixed(1)}"
-                            r="4"
-                            class="graph-point-received"
-                        ></circle>
+                        <circle cx="${x.toFixed(1)}" cy="${sentY.toFixed(1)}" r="4.5" class="graph-point-sent"></circle>
+                        <circle cx="${x.toFixed(1)}" cy="${receivedY.toFixed(1)}" r="4.5" class="graph-point-received"></circle>
+                        <text x="${x.toFixed(1)}" y="${sentLabelY.toFixed(1)}" text-anchor="middle" class="graph-value-label graph-value-sent">${formatNumber(value.sent)}</text>
+                        <text x="${x.toFixed(1)}" y="${receivedLabelY.toFixed(1)}" text-anchor="middle" class="graph-value-label graph-value-received">${formatNumber(value.received)}</text>
                     </g>
                 `;
             }
@@ -2221,7 +2258,7 @@ function bindQuickMenu() {
         return m ? m[1] : "";
     }
 
-    async function fillInfoModal(item) {
+    function prepareInfoModal(item) {
         $("info-client").textContent = item.client || "—";
         $("info-movement").textContent = movementLabel(item.movement) || "—";
         $("info-asset").textContent = item.asset || "—";
@@ -2232,29 +2269,22 @@ function bindQuickMenu() {
         const photoWrap = $("info-photo-wrap");
         const commentEl = $("info-comment");
         const emptyEl = $("info-empty");
+        const image = $("info-photo");
+        const photoStatus = $("info-photo-status");
+
+        FM_MEDIA?.revokeObjectUrl?.(image);
+        image.removeAttribute("src");
+        image.classList.remove("is-loading");
 
         if (item.image) {
-            const image = $("info-photo");
-            FM_MEDIA?.revokeObjectUrl?.(image);
             photoWrap.classList.remove("hidden");
-            image.removeAttribute("src");
+            photoStatus?.classList.remove("hidden");
+            if (photoStatus) photoStatus.textContent = "Loading photo…";
             image.classList.add("is-loading");
             $("info-photo-link").href = item.image;
-            const photoStatus=$("info-photo-status");
-            photoStatus?.classList.remove("hidden");
-            if(photoStatus) photoStatus.textContent="Loading photo...";
-            let loaded=false;
-            try {
-                loaded=await FM_MEDIA.loadDriveImage(image,item.image,state.accessToken);
-                if(!loaded && photoStatus) photoStatus.textContent="Preview unavailable here. Use Open full size in Drive.";
-            } finally {
-                image.classList.remove("is-loading");
-                if(photoStatus && loaded) photoStatus.classList.add("hidden");
-            }
         } else {
             photoWrap.classList.add("hidden");
-            $("info-photo").removeAttribute("src");
-            $("info-photo-status")?.classList.add("hidden");
+            photoStatus?.classList.add("hidden");
             $("info-photo-link").removeAttribute("href");
         }
 
@@ -2267,21 +2297,48 @@ function bindQuickMenu() {
         }
 
         emptyEl.classList.toggle("hidden", Boolean(item.image || item.comment));
-        $("info-modal").classList.remove("hidden");
+    }
+
+    async function loadInfoPhoto(item) {
+        if (!item.image) return;
+        const image = $("info-photo");
+        const photoStatus = $("info-photo-status");
+        let loaded = false;
+        try {
+            loaded = await FM_MEDIA.loadDriveImage(image, item.image, state.accessToken);
+            if (loaded) {
+                image.classList.remove("is-loading");
+                photoStatus?.classList.add("hidden");
+            } else {
+                image.classList.remove("is-loading");
+                if (photoStatus) photoStatus.textContent = "Preview unavailable here. Use Open full size in Drive.";
+            }
+        } catch (error) {
+            console.warn("Movement photo preview failed:", error);
+            image.classList.remove("is-loading");
+            if (photoStatus) photoStatus.textContent = "Preview unavailable here. Use Open full size in Drive.";
+        }
     }
 
     function openInfoModal(index) {
         const item = state.auditVisibleRows[index];
-        if (item) fillInfoModal(item);
+        if (!item) return;
+
+        prepareInfoModal(item);
+        $("info-modal").classList.remove("hidden");
+        requestAnimationFrame(() => loadInfoPhoto(item));
     }
 
     function openClientTransactionInfo(index) {
         const item = state.clientDetailsRows[index];
-        if (item) fillInfoModal(item);
+        if (!item) return;
+
+        prepareInfoModal(item);
+        $("info-modal").classList.remove("hidden");
+        requestAnimationFrame(() => loadInfoPhoto(item));
     }
 
     function closeInfoModal() {
-        state.infoPhotoRequestId = (state.infoPhotoRequestId || 0) + 1;
         const image = $("info-photo");
         FM_MEDIA?.revokeObjectUrl?.(image);
         $("info-modal")?.classList.add("hidden");
@@ -2571,7 +2628,7 @@ function bindQuickMenu() {
                     const tooltip = verificationDate
                         ? `Verified on ${verificationDate}`
                         : "Verified";
-                    return `<span class="inventory-verified-badge" title="${escapeAttr(tooltip)}" aria-label="${escapeAttr(tooltip)}">✓ Verified</span>`;
+                    return `<span class="inventory-verified-badge" title="${escapeAttr(tooltip)}" aria-label="${escapeAttr(tooltip)}"><span class="inventory-verified-check" aria-hidden="true">✓</span><span class="inventory-verified-text">Verified</span></span>`;
                 })()
                 : "";
 
@@ -3021,6 +3078,18 @@ function bindQuickMenu() {
         }
 
         movementSubmitBusy = true;
+        setMovementSubmitting(true, "Checking Google access...");
+
+        try {
+            await ensureWriteAccess();
+        } catch (authError) {
+            movementSubmitBusy = false;
+            setMovementSubmitting(false);
+            showReconnectUI("Google access expired. Allow Sheets & Drive access, then submit the form again.");
+            setMovementStatus(authError.message || "Google access could not be refreshed.", true);
+            return;
+        }
+
         setMovementSubmitting(true, photoFile ? "Uploading photo..." : "Recording movement...");
 
         try {
@@ -3845,6 +3914,28 @@ function bindQuickMenu() {
     function setUserProfile(profile) { $("user-name").textContent = profile?.name || "Google user"; $("user-email").textContent = profile?.email || ""; if (profile?.picture) { $("user-photo").src = profile.picture; $("user-photo").classList.remove("hidden"); } }
     function hideLogin() { $("google-signin-button").classList.add("hidden"); $("grant-access").classList.add("hidden"); $("sign-out").classList.remove("hidden"); $("login-card").classList.add("hidden"); $("dashboard").classList.remove("hidden"); }
 
+    function showReconnectUI(message = "Google access expired. Allow Sheets & Drive access to continue.") {
+        window.FM_CONNECTION_UI?.hide();
+        $("login-card")?.classList.remove("hidden");
+        $("google-signin-button")?.classList.add("hidden");
+        $("grant-access")?.classList.remove("hidden");
+        const title = $("login-card")?.querySelector("h2");
+        if (title) title.textContent = "Reconnect Google Sheets";
+        setAuthStatus(message, true);
+    }
+
+    function refreshSavedSessionIfNeeded() {
+        const saved = readSavedSession();
+        if (!saved || !window.google?.accounts?.oauth2) return;
+        if (window.FM_AUTH_CACHE?.read?.(saved.email)?.token) return;
+        attemptSilentAccess(saved.email);
+    }
+
+    window.addEventListener("pageshow", refreshSavedSessionIfNeeded);
+    document.addEventListener("visibilitychange", () => {
+        if (!document.hidden) refreshSavedSessionIfNeeded();
+    });
+
 
     function authHeaders() {
 
@@ -3952,10 +4043,13 @@ function bindQuickMenu() {
         let response = await fetch(url, options);
         if (response.status === 401 && !options.__retried) {
             try {
-                await acquireAccessToken("none");
+                await acquireAccessToken("none", state.idTokenPayload?.email || readSavedSession()?.email, {forceRefresh: true});
                 return fetchJson(url, { ...options, __retried: true, headers: { ...(options.headers || {}), ...authHeaders() } });
             } catch (_) {
-                throw new Error("Google Sheets access expired. Please reconnect Google Sheets.");
+                state.accessToken = null;
+                window.FM_AUTH_CACHE?.clear?.();
+                showReconnectUI("Google Sheets access expired. Allow Sheets & Drive access to reconnect.");
+                throw new Error("Google Sheets access expired. Allow Sheets & Drive access to reconnect.");
             }
         }
         const text = await response.text(); let data = {}; try { data = text ? JSON.parse(text) : {}; } catch (_) {}
