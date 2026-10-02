@@ -2628,7 +2628,7 @@ function bindQuickMenu() {
                     const tooltip = verificationDate
                         ? `Verified on ${verificationDate}`
                         : "Verified";
-                    return `<span class="inventory-verified-badge" title="${escapeAttr(tooltip)}" aria-label="${escapeAttr(tooltip)}"><span class="inventory-verified-check" aria-hidden="true">✓</span><span class="inventory-verified-text">Verified</span></span>`;
+                    return `<span class="inventory-verified-badge" title="${escapeAttr(tooltip)}" aria-label="${escapeAttr(tooltip)}"><span class="inventory-verified-check" aria-hidden="true">✓</span></span>`;
                 })()
                 : "";
 
