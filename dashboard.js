@@ -2326,14 +2326,14 @@ function bindQuickMenu() {
         wb.creator = "Assets Inventory Dashboard";
         wb.created = new Date();
         wb.modified = new Date();
-        const ledger = wb.addWorksheet("Client Ledger", {views:[{state:"frozen",ySplit:1}]});
+        const ledger = wb.addWorksheet("Client Ledger", {views:[{state:"frozen",ySplit:1,showGridLines:false}]});
         ledger.columns = [
             {header:"Client",key:"client",width:20},{header:"Date",key:"date",width:13},{header:"Time",key:"time",width:11},{header:"Asset type",key:"asset",width:22},
             {header:"Quantity sent",key:"sent",width:15},{header:"Quantity received",key:"received",width:19},{header:"Difference for date",key:"difference",width:18},
             {header:"All-time difference",key:"allTimeDifference",width:19},{header:"Movement",key:"movement",width:14},{header:"Quantity",key:"quantity",width:12},
             {header:"User",key:"user",width:24},{header:"Comment",key:"comment",width:34},{header:"Picture",key:"picture",width:16},{header:"Picture link",key:"pictureLink",width:36}
         ];
-        styleWorksheetHeader(ledger.getRow(1)); ledger.sheetView.showGridLines=false;
+        styleWorksheetHeader(ledger.getRow(1));
         for (const row of data.transactions) {
             const direction = clientLedgerDirection(row.item.movement), qty = Number(row.item.quantity)||0;
             const daily = data.dailyRows.find(d => d.date === row.date && d.asset === row.asset);
@@ -2348,17 +2348,17 @@ function bindQuickMenu() {
         [5,6,10].forEach(c=>total.getCell(c).numFmt="#,##0"); total.getCell(7).numFmt="+#,##0;-#,##0;0";
         ledger.autoFilter={from:"A1",to:`N${Math.max(1,total.number-1)}`}; ledger.pageSetup={orientation:"landscape",fitToPage:true,fitToWidth:1,fitToHeight:0};
 
-        const daily = wb.addWorksheet("Daily Summary", {views:[{state:"frozen",ySplit:1}]});
+        const daily = wb.addWorksheet("Daily Summary", {views:[{state:"frozen",ySplit:1,showGridLines:false}]});
         daily.columns=[{header:"Client",key:"client",width:20},{header:"Date",key:"date",width:13},{header:"Asset type",key:"asset",width:22},{header:"Quantity sent",key:"sent",width:16},{header:"Quantity received",key:"received",width:19},{header:"Difference",key:"difference",width:15},{header:"All-time difference at date",key:"allTime",width:24},{header:"Transactions",key:"transactions",width:14},{header:"Pictures",key:"photos",width:12}];
-        styleWorksheetHeader(daily.getRow(1)); daily.sheetView.showGridLines=false;
+        styleWorksheetHeader(daily.getRow(1));
         data.dailyRows.forEach(item=>daily.addRow([client,item.date,item.asset,item.sent,item.received,item.difference,item.allTimeDifference,item.transactions,item.photoCount]));
         const dt= daily.addRow([]); dt.getCell(1).value=`PERIOD TOTALS — ${periodLabel}`; dt.getCell(4).value=data.periodTotals.sent; dt.getCell(5).value=data.periodTotals.received; dt.getCell(6).value=data.periodTotals.difference; dt.getCell(8).value=data.periodTotals.transactions; dt.getCell(9).value=data.periodTotals.photos; styleWorksheetTotals(dt);
         [4,5,8,9].forEach(c=>dt.getCell(c).numFmt="#,##0"); dt.getCell(6).numFmt="+#,##0;-#,##0;0";
         daily.autoFilter={from:"A1",to:`I${Math.max(1,dt.number-1)}`};
 
-        const notes=wb.addWorksheet("Ledger Notes"); notes.columns=[{header:"Field",key:"field",width:30},{header:"Meaning",key:"meaning",width:100}]; styleWorksheetHeader(notes.getRow(1)); notes.addRows([
+        const notes=wb.addWorksheet("Ledger Notes", {views:[{showGridLines:false}]}); notes.columns=[{header:"Field",key:"field",width:30},{header:"Meaning",key:"meaning",width:100}]; styleWorksheetHeader(notes.getRow(1)); notes.addRows([
             ["Client",client],["Period",periodLabel],["Date difference","Sent minus received for the client + asset type on that date."],["All-time difference","Cumulative sent minus received for the client + asset type through that transaction date, including history before the selected export period."],["Picture","Embedded in Client Ledger when enabled and available; Picture link remains as the Drive/source link."],["Period totals","Totals at the bottom are totals for the selected generated period, not a sum of repeated all-time balances."]
-        ]); notes.eachRow((row,i)=>{if(i>1)row.alignment={vertical:"top",wrapText:true};}); notes.sheetView.showGridLines=false;
+        ]); notes.eachRow((row,i)=>{if(i>1)row.alignment={vertical:"top",wrapText:true};});
         return wb;
     }
 
