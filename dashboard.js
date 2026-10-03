@@ -2320,45 +2320,157 @@ function bindQuickMenu() {
             worksheet.getRow(rowNumber).height = Math.max(66, worksheet.getRow(rowNumber).height || 15);
         } catch(error) { console.warn("Client ledger photo embed failed:", error); }
     }
+    function applyLedgerCellBorders(cell, color="FF2B2B2B") {
+        cell.border = {
+            top:{style:"thin",color:{argb:color}},
+            left:{style:"thin",color:{argb:color}},
+            bottom:{style:"thin",color:{argb:color}},
+            right:{style:"thin",color:{argb:color}}
+        };
+    }
+
+    function mergeLedgerGroup(worksheet, startRow, endRow, columns) {
+        if (endRow <= startRow) return;
+        for (const column of columns) {
+            const range = `${column}${startRow}:${column}${endRow}`;
+            worksheet.mergeCells(range);
+            const cell = worksheet.getCell(`${column}${startRow}`);
+            cell.alignment = {vertical:"middle", horizontal:column === "D" ? "left" : "left", wrapText:true};
+        }
+    }
+
     async function buildClientLedgerWorkbook(client, data, periodLabel, includePhotos) {
         const ExcelJS = await ensureExcelJS();
         const wb = new ExcelJS.Workbook();
         wb.creator = "Assets Inventory Dashboard";
         wb.created = new Date();
         wb.modified = new Date();
+
+        // Match the provided ledger template: one row per asset, with transaction-level
+        // fields merged when several asset rows belong to the same timestamp.
         const ledger = wb.addWorksheet("Client Ledger", {views:[{state:"frozen",ySplit:1,showGridLines:false}]});
         ledger.columns = [
-            {header:"Client",key:"client",width:20},{header:"Date",key:"date",width:13},{header:"Time",key:"time",width:11},{header:"Asset type",key:"asset",width:22},
-            {header:"Quantity sent",key:"sent",width:15},{header:"Quantity received",key:"received",width:19},{header:"Difference for date",key:"difference",width:18},
-            {header:"All-time difference",key:"allTimeDifference",width:19},{header:"Movement",key:"movement",width:14},{header:"Quantity",key:"quantity",width:12},
-            {header:"User",key:"user",width:24},{header:"Comment",key:"comment",width:34},{header:"Picture",key:"picture",width:16},{header:"Picture link",key:"pictureLink",width:36}
+            {header:"Client",key:"client",width:20},
+            {header:"Date",key:"date",width:13},
+            {header:"Time",key:"time",width:11},
+            {header:"Asset type",key:"asset",width:22},
+            {header:"Quantity sent",key:"sent",width:15},
+            {header:"Quantity received",key:"received",width:19},
+            {header:"Difference for date",key:"difference",width:18},
+            {header:"All-time difference",key:"allTimeDifference",width:19},
+            {header:"Comment",key:"comment",width:34},
+            {header:"Picture",key:"picture",width:16},
+            {header:"Picture link",key:"pictureLink",width:16}
         ];
         styleWorksheetHeader(ledger.getRow(1));
+
+        const transactionGroups = [];
+        let currentGroup = null;
         for (const row of data.transactions) {
-            const direction = clientLedgerDirection(row.item.movement), qty = Number(row.item.quantity)||0;
+            const direction = clientLedgerDirection(row.item.movement);
+            const qty = Number(row.item.quantity) || 0;
             const daily = data.dailyRows.find(d => d.date === row.date && d.asset === row.asset);
-            const excelRow = ledger.addRow([client,row.date,row.time,row.asset,direction === "Sent" ? qty : 0,direction === "Received" ? qty : 0,daily?.difference || 0,row.allTimeDifference,direction,qty,String(row.item.user||""),String(row.item.comment||""),row.item.image ? "" : "—",""]);
-            excelRow.alignment={vertical:"middle",wrapText:true};
-            excelRow.getCell(14).value = row.item.image ? {text:"Open photo",hyperlink:row.item.image} : "";
-            if (row.item.image) { excelRow.getCell(14).font={color:{argb:"FFB794F4"},underline:true}; await addLedgerPhoto(wb,ledger,excelRow.number,13,row.item,includePhotos); }
-            [5,6,10].forEach(c => excelRow.getCell(c).numFmt="#,##0");
+            const excelRow = ledger.addRow([
+                client,
+                row.date,
+                row.time,
+                row.asset,
+                direction === "Sent" ? qty : 0,
+                direction === "Received" ? qty : 0,
+                daily?.difference || 0,
+                row.allTimeDifference,
+                String(row.item.comment || ""),
+                "",
+                ""
+            ]);
+            excelRow.alignment = {vertical:"middle", wrapText:true};
+            excelRow.height = 64;
+            for (let c = 1; c <= 11; c++) applyLedgerCellBorders(excelRow.getCell(c));
+            [5,6].forEach(c => excelRow.getCell(c).numFmt="#,##0");
             [7,8].forEach(c => excelRow.getCell(c).numFmt="+#,##0;-#,##0;0");
+
+            const timestampKey = `${row.date}\u0000${row.time}`;
+            if (!currentGroup || currentGroup.key !== timestampKey) {
+                currentGroup = {key:timestampKey,startRow:excelRow.number,endRow:excelRow.number,rows:[row]};
+                transactionGroups.push(currentGroup);
+            } else {
+                currentGroup.endRow = excelRow.number;
+                currentGroup.rows.push(row);
+            }
         }
-        const total = ledger.addRow([]); total.getCell(1).value=`PERIOD TOTALS — ${periodLabel}`; total.getCell(5).value=data.periodTotals.sent; total.getCell(6).value=data.periodTotals.received; total.getCell(7).value=data.periodTotals.difference; total.getCell(10).value=data.periodTotals.sent+data.periodTotals.received+data.periodTotals.discarded; total.getCell(11).value=`${data.periodTotals.transactions} transactions · ${data.periodTotals.photos} photos`; styleWorksheetTotals(total);
-        [5,6,10].forEach(c=>total.getCell(c).numFmt="#,##0"); total.getCell(7).numFmt="+#,##0;-#,##0;0";
-        ledger.autoFilter={from:"A1",to:`N${Math.max(1,total.number-1)}`}; ledger.pageSetup={orientation:"landscape",fitToPage:true,fitToWidth:1,fitToHeight:0};
+
+        // Client is a single logical block in the exported ledger.
+        if (data.transactions.length > 1) mergeLedgerGroup(ledger, 2, 1 + data.transactions.length, ["A"]);
+
+        // Same timestamp = one transaction. Merge only fields that describe that
+        // transaction as a whole, leaving asset-level quantities/differences separate.
+        for (const group of transactionGroups) {
+            const firstRow = group.startRow;
+            const lastRow = group.endRow;
+            const firstItem = group.rows[0]?.item;
+            const photoItem = group.rows.find(candidate => candidate?.item?.image)?.item || firstItem;
+            mergeLedgerGroup(ledger, firstRow, lastRow, ["B","C"]);
+
+            if (photoItem?.image) {
+                mergeLedgerGroup(ledger, firstRow, lastRow, ["J","K"]);
+                const linkCell = ledger.getCell(`K${firstRow}`);
+                linkCell.value = {text:"Open photo", hyperlink:photoItem.image};
+                linkCell.font = {color:{argb:"FFB794F4"},underline:true};
+                linkCell.alignment = {vertical:"middle",horizontal:"center",wrapText:true};
+                await addLedgerPhoto(wb, ledger, firstRow, 10, photoItem, includePhotos);
+            } else {
+                ledger.getCell(`J${firstRow}`).value = "";
+                ledger.getCell(`K${firstRow}`).value = "";
+                ledger.getCell(`J${firstRow}`).alignment = {vertical:"middle",horizontal:"center"};
+                ledger.getCell(`K${firstRow}`).alignment = {vertical:"middle",horizontal:"center"};
+            }
+        }
+
+        const total = ledger.addRow([]);
+        total.getCell(1).value = `PERIOD TOTALS — ${periodLabel}`;
+        total.getCell(5).value = data.periodTotals.sent;
+        total.getCell(6).value = data.periodTotals.received;
+        total.getCell(7).value = data.periodTotals.difference;
+        styleWorksheetTotals(total);
+        for (let c = 1; c <= 11; c++) applyLedgerCellBorders(total.getCell(c), "FF3A3152");
+        [5,6].forEach(c => total.getCell(c).numFmt="#,##0");
+        total.getCell(7).numFmt="+#,##0;-#,##0;0";
+        ledger.autoFilter = {from:"A1",to:`K${Math.max(1,total.number-1)}`};
+        ledger.pageSetup = {orientation:"landscape",fitToPage:true,fitToWidth:1,fitToHeight:0};
 
         const daily = wb.addWorksheet("Daily Summary", {views:[{state:"frozen",ySplit:1,showGridLines:false}]});
-        daily.columns=[{header:"Client",key:"client",width:20},{header:"Date",key:"date",width:13},{header:"Asset type",key:"asset",width:22},{header:"Quantity sent",key:"sent",width:16},{header:"Quantity received",key:"received",width:19},{header:"Difference",key:"difference",width:15},{header:"All-time difference at date",key:"allTime",width:24},{header:"Transactions",key:"transactions",width:14},{header:"Pictures",key:"photos",width:12}];
+        daily.columns = [
+            {header:"Client",key:"client",width:20},{header:"Date",key:"date",width:13},{header:"Asset type",key:"asset",width:22},
+            {header:"Quantity sent",key:"sent",width:16},{header:"Quantity received",key:"received",width:19},{header:"Difference",key:"difference",width:15},
+            {header:"All-time difference at date",key:"allTime",width:24},{header:"Transactions",key:"transactions",width:14},{header:"Pictures",key:"photos",width:12}
+        ];
         styleWorksheetHeader(daily.getRow(1));
-        data.dailyRows.forEach(item=>daily.addRow([client,item.date,item.asset,item.sent,item.received,item.difference,item.allTimeDifference,item.transactions,item.photoCount]));
-        const dt= daily.addRow([]); dt.getCell(1).value=`PERIOD TOTALS — ${periodLabel}`; dt.getCell(4).value=data.periodTotals.sent; dt.getCell(5).value=data.periodTotals.received; dt.getCell(6).value=data.periodTotals.difference; dt.getCell(8).value=data.periodTotals.transactions; dt.getCell(9).value=data.periodTotals.photos; styleWorksheetTotals(dt);
-        [4,5,8,9].forEach(c=>dt.getCell(c).numFmt="#,##0"); dt.getCell(6).numFmt="+#,##0;-#,##0;0";
-        daily.autoFilter={from:"A1",to:`I${Math.max(1,dt.number-1)}`};
+        data.dailyRows.forEach(item => daily.addRow([client,item.date,item.asset,item.sent,item.received,item.difference,item.allTimeDifference,item.transactions,item.photoCount]));
+        const dt = daily.addRow([]);
+        dt.getCell(1).value = `PERIOD TOTALS — ${periodLabel}`;
+        dt.getCell(4).value = data.periodTotals.sent;
+        dt.getCell(5).value = data.periodTotals.received;
+        dt.getCell(6).value = data.periodTotals.difference;
+        dt.getCell(8).value = data.periodTotals.transactions;
+        dt.getCell(9).value = data.periodTotals.photos;
+        styleWorksheetTotals(dt);
+        [4,5,8,9].forEach(c => dt.getCell(c).numFmt="#,##0");
+        dt.getCell(6).numFmt="+#,##0;-#,##0;0";
+        daily.autoFilter = {from:"A1",to:`I${Math.max(1,dt.number-1)}`};
 
-        const notes=wb.addWorksheet("Ledger Notes", {views:[{showGridLines:false}]}); notes.columns=[{header:"Field",key:"field",width:30},{header:"Meaning",key:"meaning",width:100}]; styleWorksheetHeader(notes.getRow(1)); notes.addRows([
-            ["Client",client],["Period",periodLabel],["Date difference","Sent minus received for the client + asset type on that date."],["All-time difference","Cumulative sent minus received for the client + asset type through that transaction date, including history before the selected export period."],["Picture","Embedded in Client Ledger when enabled and available; Picture link remains as the Drive/source link."],["Period totals","Totals at the bottom are totals for the selected generated period, not a sum of repeated all-time balances."]
-        ]); notes.eachRow((row,i)=>{if(i>1)row.alignment={vertical:"top",wrapText:true};});
+        const notes = wb.addWorksheet("Ledger Notes", {views:[{showGridLines:false}]});
+        notes.columns = [{header:"Field",key:"field",width:30},{header:"Meaning",key:"meaning",width:100}];
+        styleWorksheetHeader(notes.getRow(1));
+        notes.addRows([
+            ["Client",client],
+            ["Period",periodLabel],
+            ["Date difference","Sent minus received for the client + asset type on that date."],
+            ["All-time difference","Cumulative sent minus received for the client + asset type through that transaction date, including history before the selected export period."],
+            ["Merged transaction cells","Client spans the full exported client block. Date, time, picture and picture link are merged across asset rows that share the exact same transaction timestamp."],
+            ["Picture","Embedded in Client Ledger when enabled and available; Picture link remains as the Drive/source link."],
+            ["Period totals","Totals at the bottom are totals for the selected generated period, not a sum of repeated all-time balances."]
+        ]);
+        notes.eachRow((row,i) => { if (i > 1) row.alignment = {vertical:"top",wrapText:true}; });
         return wb;
     }
 
