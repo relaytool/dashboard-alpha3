@@ -9,7 +9,7 @@
 
     <title>FM Assets Dashboard</title>
 
-    <link rel="stylesheet" href="dashboard.css?v=20261002-white-v3">
+    <link rel="stylesheet" href="dashboard.css?v=eod-ledger-20261003">
 </head>
 
 <body>
@@ -76,16 +76,15 @@
         <span class="menu-toggle-chevron" aria-hidden="true">⌄</span>
     </button>
     <div id="quick-links" class="menu-links">
-        <a class="active" href="index.html">Dashboard</a>
-        <a href="movement-logger.html" target="_blank">Record movement</a>
-        <a href="routine-outbounds.html">Routine outbounds</a>
-        <a href="alerts.html">Alerts <span id="alerts-nav-badge" class="nav-alert-badge hidden">0</span></a>
-        <a href="#warehouse-section">Warehouse</a>
-        <a href="#clients-section">Clients</a>
-        <a href="#audit-trail">Audit trail</a>
-        <a href="https://relaytool.github.io/assets-reporting/" target="_blank">Reporting</a>
-
-        <!-- Add more quick links here -->
+        <a href="index.html" class="active">Dashboard</a>
+<a href="movement-logger.html">Record movement</a>
+<a href="routine-outbounds.html">Routine outbounds</a>
+<a href="alerts.html">Alerts <span id="alerts-nav-badge" class="nav-alert-badge hidden">0</span></a>
+<a href="index.html#warehouse-section">Warehouse</a>
+<a href="index.html#clients-section">Clients</a>
+<a href="index.html#audit-trail">Audit trail</a>
+<a href="https://relaytool.github.io/assets-reporting/" target="_blank" rel="noopener">EOD routines</a>
+<a href="https://relaytool.github.io/dailyreport/" target="_blank" rel="noopener">Daily reporting</a>
     </div>
 </nav>
 
@@ -705,6 +704,40 @@
 </div>
 
 
+
+<!-- CLIENT LEDGER EXPORT -->
+<div id="client-ledger-export-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="client-ledger-export-title">
+    <div class="modal-backdrop" data-close-client-ledger-export></div>
+    <div class="modal-card client-ledger-export-card">
+        <div class="modal-header">
+            <div>
+                <div class="eyebrow">CLIENT TOTALS</div>
+                <h2 id="client-ledger-export-title">Export client ledger</h2>
+                <p class="muted">Builds a proper XLSX ledger with transaction photos, daily totals and the all-time client balance carried forward to each date.</p>
+            </div>
+            <button type="button" id="close-client-ledger-export" class="icon-button" aria-label="Close">×</button>
+        </div>
+        <div class="client-ledger-export-form">
+            <div class="client-ledger-export-client">
+                <span>Client</span>
+                <strong id="client-ledger-export-client"></strong>
+            </div>
+            <label>From date<input type="date" id="client-ledger-export-from"></label>
+            <label>To date<input type="date" id="client-ledger-export-to"></label>
+            <label>Asset type<select id="client-ledger-export-asset"><option value="">All asset types</option></select></label>
+            <label class="client-ledger-export-check">
+                <input type="checkbox" id="client-ledger-export-photos" checked>
+                <span>Embed transaction photos when available</span>
+            </label>
+            <p id="client-ledger-export-status" class="status" aria-live="polite"></p>
+        </div>
+        <div class="client-ledger-export-actions">
+            <button type="button" class="secondary" id="cancel-client-ledger-export">Cancel</button>
+            <button type="button" class="primary" id="run-client-ledger-export">Export XLSX</button>
+        </div>
+    </div>
+</div>
+
 <!-- WAREHOUSE ASSET DETAILS -->
 <div id="warehouse-asset-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="warehouse-asset-modal-title">
     <div class="modal-backdrop" data-close-warehouse-asset></div>
@@ -910,9 +943,9 @@
       onload="window.dispatchEvent(new Event('fm-google-loaded'))"
     ></script>
 
-<script src="config.js?v=20261002-white-v3"></script>
-<script src="routine-alert-utils.js?v=20261002-white-v3"></script>
-<script src="dashboard.js?v=20261002-white-v3"></script>
+<script src="config.js?v=eod-ledger-20261003"></script>
+<script src="routine-alert-utils.js?v=eod-ledger-20261003"></script>
+<script src="dashboard.js?v=eod-ledger-20261003"></script>
 
 </body>
 </html>

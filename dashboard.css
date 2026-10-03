@@ -3521,3 +3521,73 @@ td{border-top-color:#e7ebf0!important;color:#273244!important}
 .graph-value-received{fill:#a61b1b!important}
 .graph-loading-state{display:flex;align-items:center;justify-content:center;min-height:150px;color:#667085;font-size:13px}
 .warehouse-asset-card{cursor:pointer!important}
+
+
+/* ===== Client ledger export ===== */
+.client-ledger-export-card{width:min(620px,calc(100% - 28px));max-height:90vh;overflow:auto}
+.client-ledger-export-form{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:8px 25px 18px}
+.client-ledger-export-form>label{display:flex;flex-direction:column;gap:6px;color:#697386;font-size:11px;font-weight:800}
+.client-ledger-export-form input,.client-ledger-export-form select{width:100%;min-width:0;border:1px solid #d7dce2;border-radius:10px;background:#fff;padding:11px 12px;color:#17202a}
+.client-ledger-export-client{grid-column:1/-1;padding:12px 14px;border:1px solid #e3e8ee;border-radius:11px;background:#f8fafc}
+.client-ledger-export-client span{display:block;color:#8b93a1;font-size:10px;text-transform:uppercase;letter-spacing:.08em;font-weight:850}
+.client-ledger-export-client strong{display:block;margin-top:4px;color:#17202a;font-size:17px}
+.client-ledger-export-check{grid-column:1/-1!important;display:flex!important;flex-direction:row!important;align-items:center!important;gap:9px!important;font-size:12px!important;font-weight:700!important}
+.client-ledger-export-check input{width:18px!important;height:18px!important;flex:0 0 auto}
+.client-ledger-export-actions{display:flex;justify-content:flex-end;gap:10px;padding:0 25px 25px}
+.client-ledger-export-actions button{min-height:42px}
+.transaction-summary-heading-actions{flex-wrap:wrap}
+.transaction-summary-export{white-space:nowrap}
+
+/* ===== Graph values: tooltip only, never printed beside points ===== */
+.graph-point-hit{fill:transparent;stroke:transparent;cursor:pointer}
+.graph-point-hit:hover{fill:rgba(17,24,39,.06)}
+.graph-hover-tooltip{position:absolute;z-index:8;display:none;min-width:145px;max-width:240px;padding:8px 10px;border:1px solid #dbe2ea;border-radius:9px;background:#111827;color:#fff;box-shadow:0 10px 25px rgba(15,23,42,.18);font-size:11px;line-height:1.4;font-weight:750;pointer-events:none;white-space:normal}
+.client-graph-scroll,.asset-history-graph .client-graph-scroll{position:relative}
+@media(max-width:760px){
+  .client-ledger-export-form{grid-template-columns:1fr;padding-inline:16px}
+  .client-ledger-export-actions{padding-inline:16px;padding-bottom:16px}
+  .client-ledger-export-actions button{flex:1}
+  .graph-hover-tooltip{min-width:150px;max-width:220px}
+}
+
+
+/* Legacy point labels are intentionally disabled; values are available on hover/touch. */
+.graph-value-label,.graph-value-chip{display:none!important}
+
+
+/* ===== Client ledger export + project-wide graph tooltips ===== */
+.transaction-summary-export{min-height:34px;padding:7px 11px;font-size:11px;white-space:nowrap}
+.client-ledger-export-card{width:min(720px,calc(100% - 24px));padding:22px}
+.client-ledger-export-form{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:18px}
+.client-ledger-export-form label{display:flex;flex-direction:column;gap:7px;font-size:11px;font-weight:800;color:var(--muted,#aaa5bc)}
+.client-ledger-export-form input,.client-ledger-export-form select{width:100%;box-sizing:border-box}
+.client-ledger-export-client{grid-column:1/-1;display:flex;align-items:center;justify-content:space-between;gap:16px;padding:13px 14px;border:1px solid var(--border,#2a273b);border-radius:13px;background:#0f0f17}
+.client-ledger-export-client span{font-size:10px;color:var(--muted,#aaa5bc);text-transform:uppercase;letter-spacing:.09em;font-weight:850}
+.client-ledger-export-client strong{font-size:14px}
+.client-ledger-export-check{grid-column:1/-1;flex-direction:row!important;align-items:center;gap:9px!important;padding:10px 0}
+.client-ledger-export-check input{width:18px;height:18px;min-height:18px!important}
+.client-ledger-export-actions{display:flex;justify-content:flex-end;gap:9px;margin-top:18px}
+.graph-hover-tooltip{position:absolute;z-index:10;display:block;visibility:hidden;opacity:0;transform:translate(-50%,-100%);max-width:min(260px,calc(100% - 16px));padding:7px 10px;border:1px solid rgba(167,139,250,.48);border-radius:9px;background:rgba(18,17,28,.98);color:#fff;font-size:11px;line-height:1.35;font-weight:800;pointer-events:none;box-shadow:0 10px 28px rgba(0,0,0,.38);white-space:nowrap;transition:opacity .12s ease,visibility .12s ease}
+.graph-hover-tooltip.is-visible{visibility:visible;opacity:1}
+.graph-point-hit{fill:transparent;stroke:transparent;cursor:pointer;pointer-events:all}
+.graph-point-hit:hover{fill:rgba(167,139,250,.10)}
+@media(max-width:760px){
+  .client-ledger-export-card{width:min(100% - 14px,720px);padding:17px}
+  .client-ledger-export-form{grid-template-columns:1fr;gap:11px}
+  .client-ledger-export-actions{display:grid;grid-template-columns:1fr 1.35fr}
+  .client-ledger-export-actions button{width:100%}
+  .graph-hover-tooltip{font-size:12px;padding:8px 10px;white-space:normal;text-align:center}
+  .transaction-summary-heading-actions{display:grid;grid-template-columns:1fr auto;align-items:center;gap:8px}
+  .transaction-summary-export{order:-1;grid-column:1/-1;width:100%;min-height:42px}
+}
+
+.graph-value-label,.graph-value-chip{display:none!important}
+
+
+/* Project-wide quick-links mobile behavior */
+@media(max-width:760px){
+  .quick-nav .menu-toggle{min-height:46px;width:100%;padding:10px 13px;gap:9px}
+  .quick-nav .menu-links{display:none;grid-template-columns:1fr 1fr;gap:7px;padding:8px}
+  .quick-nav.menu-open .menu-links{display:grid}
+  .quick-nav .menu-links a{min-height:42px;display:flex;align-items:center;justify-content:center;padding:8px 9px;text-align:center;border-radius:9px;font-size:11px;line-height:1.2}
+}

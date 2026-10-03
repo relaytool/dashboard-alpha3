@@ -1,4 +1,4 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1"><meta name="theme-color" content="#09090f"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><title>FM Asset Movement Logger</title><link rel="stylesheet" href="movement-logger.css?v=20261002-dark-v1">
+<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1"><meta name="theme-color" content="#09090f"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><title>FM Asset Movement Logger</title><link rel="stylesheet" href="movement-logger.css?v=eod-ledger-20261003">
 </head><body>
 <div id="connection-loading" class="connection-loading hidden" role="status" aria-live="polite" aria-hidden="true">
   <div class="connection-loading-card">
@@ -17,11 +17,14 @@
     </button>
     <div id="quick-links" class="menu-links">
         <a href="index.html">Dashboard</a>
-        <a class="active" href="movement-logger.html">Record movement</a><a href="routine-outbounds.html">Routine outbounds</a><a href="alerts.html">Alerts <span id="alerts-nav-badge" class="hidden">0</span></a>
-        <a href="index.html#warehouse-section">Warehouse</a>
-        <a href="index.html#clients-section">Clients</a>
-        <a href="index.html#audit-trail">Audit trail</a>
-        <!-- Add more quick links here -->
+<a href="movement-logger.html" class="active">Record movement</a>
+<a href="routine-outbounds.html">Routine outbounds</a>
+<a href="alerts.html">Alerts <span id="alerts-nav-badge" class="nav-alert-badge hidden">0</span></a>
+<a href="index.html#warehouse-section">Warehouse</a>
+<a href="index.html#clients-section">Clients</a>
+<a href="index.html#audit-trail">Audit trail</a>
+<a href="https://relaytool.github.io/assets-reporting/" target="_blank" rel="noopener">EOD routines</a>
+<a href="https://relaytool.github.io/dailyreport/" target="_blank" rel="noopener">Daily reporting</a>
     </div>
 </nav>
 <section id="login-card" class="card login-card">
@@ -55,4 +58,4 @@
       async
       defer
       onload="window.dispatchEvent(new Event('fm-google-loaded'))"
-    ></script><script src="config.js?v=20261002-dark-v1"></script><script src="movement-logger.js?v=20261002-dark-v1"></script></body></html>
+    ></script><script src="config.js?v=eod-ledger-20261003"></script><script src="movement-logger.js?v=eod-ledger-20261003"></script></body></html>

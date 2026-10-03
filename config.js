@@ -254,5 +254,63 @@ window.FM_MEDIA = window.FM_MEDIA || (() => {
         }
     }
 
-    return { driveFileIdFromLink, loadDriveImage, optimizeImageForUpload, revokeObjectUrl };
+    async function loadImageDataUrl(url, accessToken){
+        const source = String(url || "").trim();
+        if(!source) return null;
+        const fileId = driveFileIdFromLink(source);
+        const candidates = [];
+        if(fileId && accessToken){
+            candidates.push(`${DRIVE_API}/${encodeURIComponent(fileId)}?alt=media`);
+            candidates.push(`https://drive.google.com/thumbnail?id=${encodeURIComponent(fileId)}&sz=w1600`);
+        }
+        candidates.push(source);
+
+        for(const candidate of candidates){
+            try{
+                const isGoogleCandidate = candidate !== source && Boolean(fileId && accessToken);
+                const response = await fetch(candidate, {
+                    headers: isGoogleCandidate ? { Authorization: `Bearer ${accessToken}` } : {},
+                    cache: "force-cache"
+                });
+                if(!response.ok) continue;
+                let blob = await response.blob();
+                let type = String(blob.type || "").toLowerCase();
+                if(!["image/jpeg","image/png","image/gif"].includes(type)){
+                    try{
+                        const objectUrl = URL.createObjectURL(blob);
+                        try{
+                            const image = new Image();
+                            image.decoding = "async";
+                            image.src = objectUrl;
+                            await new Promise((resolve, reject) => { image.onload = resolve; image.onerror = reject; });
+                            const scale = Math.min(1, 1600 / Math.max(image.naturalWidth || image.width, image.naturalHeight || image.height));
+                            const canvas = document.createElement("canvas");
+                            canvas.width = Math.max(1, Math.round((image.naturalWidth || image.width) * scale));
+                            canvas.height = Math.max(1, Math.round((image.naturalHeight || image.height) * scale));
+                            const ctx = canvas.getContext("2d", {alpha:false});
+                            if(!ctx) continue;
+                            ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+                            const converted = await new Promise(resolve => canvas.toBlob(resolve, "image/jpeg", 0.9));
+                            if(!converted) continue;
+                            blob = converted;
+                            type = "image/jpeg";
+                        } finally { URL.revokeObjectURL(objectUrl); }
+                    }catch(_){ continue; }
+                }
+                const dataUrl = await new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onload = () => resolve(String(reader.result || ""));
+                    reader.onerror = reject;
+                    reader.readAsDataURL(blob);
+                });
+                const extension = type.includes("png") ? "png" : type.includes("gif") ? "gif" : "jpeg";
+                return {dataUrl, extension};
+            }catch(error){
+                console.warn("Spreadsheet image load failed:", error);
+            }
+        }
+        return null;
+    }
+
+    return { driveFileIdFromLink, loadDriveImage, loadImageDataUrl, optimizeImageForUpload, revokeObjectUrl };
 })();

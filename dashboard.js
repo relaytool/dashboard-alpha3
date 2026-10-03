@@ -208,6 +208,17 @@ document.addEventListener(
             }
             if (event.target.matches("[data-close-info]")) closeInfoModal();
         });
+        document.addEventListener("click", event => {
+            const exportButton = event.target.closest("[data-export-client-ledger]");
+            if (exportButton) {
+                openClientLedgerExport();
+                return;
+            }
+            if (event.target.matches("[data-close-client-ledger-export]")) closeClientLedgerExport();
+        });
+        $("close-client-ledger-export")?.addEventListener("click", closeClientLedgerExport);
+        $("cancel-client-ledger-export")?.addEventListener("click", closeClientLedgerExport);
+        $("run-client-ledger-export")?.addEventListener("click", runClientLedgerExport);
         $("clear-client-details-filters")?.addEventListener("click", () => {
             const client = $("client-details-title")?.textContent || "";
             if ($("client-details-filter-date")) $("client-details-filter-date").value = "";
@@ -371,83 +382,45 @@ function bindQuickMenu() {
     const toggle = document.getElementById("menu-toggle");
     const links = document.getElementById("quick-links");
 
-    if (!nav || !toggle || !links) {
-        console.warn("Quick Links menu elements not found.");
-        return;
-    }
+    if (!nav || !toggle || !links) return;
 
     const storageKey = "fmQuickMenuOpen";
+    const mobileQuery = window.matchMedia("(max-width: 760px)");
+    const isMobile = () => mobileQuery.matches;
 
-    function setOpen(open) {
-        nav.classList.toggle("menu-open", open);
-        toggle.setAttribute("aria-expanded", String(open));
-
-        try {
-            localStorage.setItem(storageKey, open ? "1" : "0");
-        } catch (error) {
-            // Ignore storage errors
+    function setOpen(open, persist = true) {
+        const mobile = isMobile();
+        const next = mobile ? Boolean(open) : Boolean(open);
+        nav.classList.toggle("menu-open", next);
+        toggle.setAttribute("aria-expanded", String(next));
+        if (persist && !mobile) {
+            try { localStorage.setItem(storageKey, next ? "1" : "0"); } catch (_) {}
         }
     }
 
-    // Mobile starts closed, desktop starts open unless the user has
-    // previously chosen a state.
     let saved = null;
+    try { saved = localStorage.getItem(storageKey); } catch (_) {}
 
-    try {
-        saved = localStorage.getItem(storageKey);
-    } catch (error) {
-        saved = null;
-    }
+    // Mobile always starts collapsed. Desktop can remember the user's preferred state.
+    setOpen(isMobile() ? false : saved === "1");
 
-    const mobile = window.matchMedia("(max-width: 760px)").matches;
-
-    if (saved === "1") {
-        setOpen(true);
-    } else if (saved === "0") {
-        setOpen(false);
-    } else {
-        setOpen(!mobile);
-    }
-
-    // Open / close menu
-    toggle.addEventListener("click", function (event) {
+    toggle.addEventListener("click", event => {
         event.preventDefault();
         event.stopPropagation();
-
-        const isOpen = nav.classList.contains("menu-open");
-        setOpen(!isOpen);
+        setOpen(!nav.classList.contains("menu-open"));
     });
 
-    links.addEventListener("click", function (event) {
+    links.addEventListener("click", event => {
         const link = event.target.closest("a");
-
         if (!link) return;
-
-        const href = link.getAttribute("href");
-
-        if (!href) return;
-
-        if (window.matchMedia("(max-width: 760px)").matches) {
-            setOpen(false);
-        }
-
-        if (href.startsWith("#")) {
-            const target = document.querySelector(href);
-
-            if (target) {
-                event.preventDefault();
-
-                setTimeout(() => {
-                    target.scrollIntoView({
-                        behavior: "smooth",
-                        block: "start"
-                    });
-
-                    history.replaceState(null, "", href);
-                }, 0);
-            }
-        }
+        if (isMobile()) setOpen(false, false);
     });
+
+    const handleViewportChange = event => {
+        if (event.matches) setOpen(false, false);
+    };
+    if (mobileQuery.addEventListener) mobileQuery.addEventListener("change", handleViewportChange);
+    else if (mobileQuery.addListener) mobileQuery.addListener(handleViewportChange);
 }
 
     function waitForGoogle() {
@@ -1639,6 +1612,62 @@ function bindQuickMenu() {
         return niceNormalized * magnitude * segments;
     }
 
+    function bindGraphTooltips(scope) {
+        if (!scope || scope.dataset.graphTooltipBound === "1") return;
+        const scroll = scope.closest ? scope.closest(".client-graph-scroll") : null;
+        if (!scroll) return;
+        scroll.dataset.graphTooltipBound = "1";
+        let tooltip = scroll.querySelector(".graph-hover-tooltip");
+        if (!tooltip) {
+            tooltip = document.createElement("div");
+            tooltip.className = "graph-hover-tooltip";
+            tooltip.setAttribute("role", "status");
+            tooltip.setAttribute("aria-live", "polite");
+            scroll.appendChild(tooltip);
+        }
+        let hideTimer = null;
+        const hide = () => {
+            window.clearTimeout(hideTimer);
+            tooltip.classList.remove("is-visible");
+            tooltip.textContent = "";
+        };
+        const show = (target, touch = false) => {
+            const message = target?.dataset?.graphTooltip || "";
+            if (!message) return;
+            tooltip.textContent = message;
+            tooltip.classList.add("is-visible");
+            const sr = scroll.getBoundingClientRect();
+            const pr = target.getBoundingClientRect();
+            const x = pr.left - sr.left + pr.width / 2;
+            const y = pr.top - sr.top;
+            tooltip.style.left = `${Math.max(8, Math.min(scroll.clientWidth - 8, x))}px`;
+            tooltip.style.top = `${Math.max(8, y - 8)}px`;
+            window.clearTimeout(hideTimer);
+            hideTimer = window.setTimeout(hide, touch ? 3200 : 2400);
+        };
+        scope.addEventListener("pointerover", event => {
+            const target = event.target.closest?.("[data-graph-tooltip]");
+            if (target && event.pointerType !== "touch") show(target, false);
+        });
+        scope.addEventListener("pointerout", event => {
+            if (event.pointerType === "touch") return;
+            const target = event.target.closest?.("[data-graph-tooltip]");
+            if (target && !target.contains(event.relatedTarget)) hide();
+        });
+        scope.addEventListener("pointerdown", event => {
+            const target = event.target.closest?.("[data-graph-tooltip]");
+            if (!target) return;
+            show(target, event.pointerType === "touch");
+            if (event.pointerType === "touch") event.preventDefault();
+        }, {passive:false});
+        scroll.addEventListener("scroll", hide, {passive:true});
+        window.addEventListener("resize", hide, {passive:true});
+    }
+
+    function graphPointHit(x, y, message, className) {
+        return `<circle cx="${Number(x).toFixed(1)}" cy="${Number(y).toFixed(1)}" r="13" class="graph-point-hit ${className || ""}" data-graph-tooltip="${escapeAttr(message)}"></circle>`;
+    }
+
     function renderClientAssetGraph(
         client,
         asset
@@ -1816,32 +1845,19 @@ function bindQuickMenu() {
             `
         ).join("");
 
-        const pointsMarkup = points.map(
-            ([date, value], index) => {
-                const x = xFor(index);
-                const sentY = yFor(value.sent);
-                const receivedY = yFor(value.received);
-                const label = formatGraphDate(date);
-                const sentLabelY = Math.max(top + 12, sentY - 16);
-                const receivedLabelY = Math.min(top + chartHeight - 4, receivedY + 26);
-                const sentText = formatNumber(value.sent);
-                const receivedText = formatNumber(value.received);
-                const sentWidth = Math.max(24, sentText.length * 7 + 10);
-                const receivedWidth = Math.max(24, receivedText.length * 7 + 10);
-
-                return `
-                    <g>
-                        <title>${escapeHtml(label)}: ${sentText} sent, ${receivedText} received</title>
-                        <circle cx="${x.toFixed(1)}" cy="${sentY.toFixed(1)}" r="4.5" class="graph-point-sent"></circle>
-                        <circle cx="${x.toFixed(1)}" cy="${receivedY.toFixed(1)}" r="4.5" class="graph-point-received"></circle>
-                        <rect x="${(x - sentWidth / 2).toFixed(1)}" y="${(sentLabelY - 10).toFixed(1)}" width="${sentWidth}" height="16" rx="8" class="graph-value-chip graph-value-chip-sent"></rect>
-                        <text x="${x.toFixed(1)}" y="${(sentLabelY + 2).toFixed(1)}" text-anchor="middle" class="graph-value-label graph-value-sent">${sentText}</text>
-                        <rect x="${(x - receivedWidth / 2).toFixed(1)}" y="${(receivedLabelY - 10).toFixed(1)}" width="${receivedWidth}" height="16" rx="8" class="graph-value-chip graph-value-chip-received"></rect>
-                        <text x="${x.toFixed(1)}" y="${(receivedLabelY + 2).toFixed(1)}" text-anchor="middle" class="graph-value-label graph-value-received">${receivedText}</text>
-                    </g>
-                `;
-            }
-        ).join("");
+        const pointsMarkup = points.map(([date, value], index) => {
+            const x = xFor(index);
+            const sentY = yFor(value.sent);
+            const receivedY = yFor(value.received);
+            const label = formatGraphDate(date);
+            return `
+                <g>
+                    <circle cx="${x.toFixed(1)}" cy="${sentY.toFixed(1)}" r="4.5" class="graph-point-sent"></circle>
+                    ${graphPointHit(x, sentY, `${label} · Sent: ${formatNumber(value.sent)}`, "graph-point-hit-sent")}
+                    <circle cx="${x.toFixed(1)}" cy="${receivedY.toFixed(1)}" r="4.5" class="graph-point-received"></circle>
+                    ${graphPointHit(x, receivedY, `${label} · Received: ${formatNumber(value.received)}`, "graph-point-hit-received")}
+                </g>`;
+        }).join("");
 
         graph.innerHTML = `
             <div class="client-graph-legend">
@@ -1889,6 +1905,7 @@ function bindQuickMenu() {
                 </svg>
             </div>
         `;
+        bindGraphTooltips(graph.querySelector(".client-graph-svg"));
     }
 
     function transactionDateKey(timestamp) {
@@ -2151,6 +2168,7 @@ function bindQuickMenu() {
                 <strong>${formatNumber(transactions.length)} matching transaction${transactions.length === 1 ? "" : "s"}</strong>
             </div>
             <div class="transaction-summary-heading-actions">
+                ${label === "Client totals" ? '<button type="button" class="primary transaction-summary-export" data-export-client-ledger>Export ledger</button>' : ""}
                 <span class="muted transaction-summary-hint">Grouped by client → asset type → direction</span>
                 <button type="button" class="secondary transaction-summary-toggle" data-summary-toggle aria-expanded="false">Expand totals</button>
             </div>
@@ -2162,6 +2180,201 @@ function bindQuickMenu() {
             </div>
         </div>`;
         container.classList.remove("hidden");
+    }
+
+    const CLIENT_LEDGER_EXCELJS_SRC = "https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js";
+    let excelJsLoadPromise = null;
+
+    function ensureExcelJS() {
+        if (window.ExcelJS) return Promise.resolve(window.ExcelJS);
+        if (excelJsLoadPromise) return excelJsLoadPromise;
+        excelJsLoadPromise = new Promise((resolve, reject) => {
+            const existing = document.querySelector('script[data-client-ledger-exceljs]');
+            if (existing) {
+                existing.addEventListener("load", () => window.ExcelJS ? resolve(window.ExcelJS) : reject(new Error("ExcelJS loaded without exposing ExcelJS.")), {once:true});
+                existing.addEventListener("error", () => reject(new Error("Spreadsheet library failed to load.")), {once:true});
+                return;
+            }
+            const script = document.createElement("script");
+            script.src = CLIENT_LEDGER_EXCELJS_SRC;
+            script.async = true;
+            script.dataset.clientLedgerExceljs = "1";
+            script.onload = () => window.ExcelJS ? resolve(window.ExcelJS) : reject(new Error("ExcelJS loaded without exposing ExcelJS."));
+            script.onerror = () => reject(new Error("Spreadsheet library failed to load."));
+            document.head.appendChild(script);
+        });
+        return excelJsLoadPromise;
+    }
+
+    function openClientLedgerExport() {
+        const modal = $("client-ledger-export-modal");
+        if (!modal) return;
+        const client = $("client-details-title")?.textContent?.trim() || "Unknown client";
+        $("client-ledger-export-client").textContent = client;
+        const dateFilter = $("client-details-filter-date")?.value || "";
+        const assetFilter = $("client-details-filter-asset")?.value || "";
+        const dates = getDashboardTransactions()
+            .filter(item => String(item.client || "").trim().toLowerCase() === client.toLowerCase())
+            .map(item => transactionDateKey(item.timestamp)).filter(Boolean).sort();
+        if ($("client-ledger-export-from")) $("client-ledger-export-from").value = dateFilter || dates[0] || "";
+        if ($("client-ledger-export-to")) $("client-ledger-export-to").value = dateFilter || dates[dates.length - 1] || "";
+        const assetSelect = $("client-ledger-export-asset");
+        if (assetSelect) {
+            const assets = [...new Set(getDashboardTransactions()
+                .filter(item => String(item.client || "").trim().toLowerCase() === client.toLowerCase())
+                .map(item => String(item.asset || "").trim()).filter(Boolean))].sort((a,b) => a.localeCompare(b));
+            assetSelect.innerHTML = `<option value="">All asset types</option>${assets.map(a => `<option value="${escapeAttr(a)}">${escapeHtml(a)}</option>`).join("")}`;
+            assetSelect.value = assets.includes(assetFilter) ? assetFilter : "";
+        }
+        const status = $("client-ledger-export-status");
+        if (status) { status.textContent = ""; status.classList.remove("error"); }
+        const run = $("run-client-ledger-export");
+        if (run) { run.disabled = false; run.textContent = "Export XLSX"; }
+        modal.classList.remove("hidden");
+    }
+
+    function closeClientLedgerExport() { $("client-ledger-export-modal")?.classList.add("hidden"); }
+
+    function clientLedgerDirection(movement) {
+        const m = String(movement || "").trim().toUpperCase();
+        if (["SENT","OUTBOUND","OUT","SEND"].includes(m)) return "Sent";
+        if (["RECEIVED","INBOUND","IN","RECEIVE"].includes(m)) return "Received";
+        if (["DISCARDED","DISCARD"].includes(m)) return "Discarded";
+        return movementLabel(movement) || String(movement || "Other");
+    }
+
+    function exportDateTime(item) {
+        const d = new Date(item.timestamp);
+        if (Number.isNaN(d.getTime())) return {date:"", time:""};
+        const pad = value => String(value).padStart(2, "0");
+        return {date:`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`, time:`${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`};
+    }
+
+    function makeClientLedgerData(client, allRows, fromKey, toKey, assetFilter) {
+        const clientRows = allRows.filter(item => String(item.client || "").trim().toLowerCase() === client.toLowerCase());
+        const wrap = (item, originalIndex) => ({item, originalIndex, ...exportDateTime(item)});
+        const sortRows = rows => rows.filter(row => row.date).sort((a,b) => (new Date(a.item.timestamp).getTime() - new Date(b.item.timestamp).getTime()) || (a.originalIndex - b.originalIndex));
+        const allSorted = sortRows(clientRows.map(wrap));
+        const inPeriod = allSorted.filter(row => (!fromKey || row.date >= fromKey) && (!toKey || row.date <= toKey) && (!assetFilter || String(row.item.asset || "").trim() === assetFilter));
+        const cumulative = new Map();
+        const daily = new Map();
+        for (const row of allSorted) {
+            const asset = String(row.item.asset || "Unknown asset").trim() || "Unknown asset";
+            const qty = Number(row.item.quantity) || 0;
+            const direction = clientLedgerDirection(row.item.movement);
+            const next = (cumulative.get(asset) || 0) + (direction === "Sent" ? qty : direction === "Received" ? -qty : 0);
+            cumulative.set(asset, next);
+            row.asset = asset;
+            row.allTimeDifference = next;
+        }
+        // Reuse the computed cumulative value from the full, chronological client history.
+        const cumulativeByRow = new Map(allSorted.map(row => [row.item, row.allTimeDifference]));
+        for (const row of inPeriod) {
+            row.asset = String(row.item.asset || "Unknown asset").trim() || "Unknown asset";
+            row.allTimeDifference = cumulativeByRow.get(row.item) || 0;
+            const key = `${row.date}\u0000${row.asset}`;
+            if (!daily.has(key)) daily.set(key, {date:row.date, asset:row.asset, sent:0, received:0, difference:0, transactions:0, photoCount:0, allTimeDifference:row.allTimeDifference});
+            const d = daily.get(key);
+            const qty = Number(row.item.quantity) || 0;
+            const direction = clientLedgerDirection(row.item.movement);
+            if (direction === "Sent") { d.sent += qty; d.difference += qty; }
+            else if (direction === "Received") { d.received += qty; d.difference -= qty; }
+            d.transactions += 1;
+            if (row.item.image) d.photoCount += 1;
+            d.allTimeDifference = row.allTimeDifference;
+        }
+        const dailyRows = [...daily.values()].sort((a,b) => a.date.localeCompare(b.date) || a.asset.localeCompare(b.asset));
+        const periodTotals = inPeriod.reduce((acc, row) => {
+            const qty = Number(row.item.quantity) || 0, direction = clientLedgerDirection(row.item.movement);
+            if (direction === "Sent") acc.sent += qty;
+            else if (direction === "Received") acc.received += qty;
+            else if (direction === "Discarded") acc.discarded += qty;
+            acc.transactions += 1;
+            if (row.item.image) acc.photos += 1;
+            return acc;
+        }, {sent:0,received:0,discarded:0,transactions:0,photos:0});
+        periodTotals.difference = periodTotals.sent - periodTotals.received;
+        return {transactions:inPeriod, dailyRows, periodTotals};
+    }
+
+    function styleWorksheetHeader(row) {
+        row.font = {bold:true, color:{argb:"FFFFFFFF"}};
+        row.fill = {type:"pattern", pattern:"solid", fgColor:{argb:"FF211B32"}};
+        row.alignment = {vertical:"middle", wrapText:true};
+        row.height = 30;
+        row.eachCell(cell => { cell.border = {bottom:{style:"thin", color:{argb:"FF4A4160"}}}; });
+    }
+    function styleWorksheetTotals(row) {
+        row.font = {bold:true, color:{argb:"FFFFFFFF"}};
+        row.fill = {type:"pattern", pattern:"solid", fgColor:{argb:"FF3A3152"}};
+        row.alignment = {vertical:"middle", wrapText:true};
+        row.height = 26;
+    }
+    async function addLedgerPhoto(workbook, worksheet, rowNumber, columnNumber, item, includePhotos) {
+        if (!includePhotos || !item?.image) return;
+        try {
+            const loaded = await FM_MEDIA?.loadImageDataUrl?.(item.image, state.accessToken);
+            if (!loaded?.dataUrl) return;
+            const imageId = workbook.addImage({base64:loaded.dataUrl, extension:loaded.extension || "jpeg"});
+            worksheet.addImage(imageId, {tl:{col:columnNumber-1,row:rowNumber-1}, ext:{width:96,height:64}});
+            worksheet.getRow(rowNumber).height = Math.max(66, worksheet.getRow(rowNumber).height || 15);
+        } catch(error) { console.warn("Client ledger photo embed failed:", error); }
+    }
+    async function buildClientLedgerWorkbook(client, data, periodLabel, includePhotos) {
+        const ExcelJS = await ensureExcelJS();
+        const wb = new ExcelJS.Workbook();
+        wb.creator = "Assets Inventory Dashboard";
+        wb.created = new Date();
+        wb.modified = new Date();
+        const ledger = wb.addWorksheet("Client Ledger", {views:[{state:"frozen",ySplit:1}]});
+        ledger.columns = [
+            {header:"Client",key:"client",width:20},{header:"Date",key:"date",width:13},{header:"Time",key:"time",width:11},{header:"Asset type",key:"asset",width:22},
+            {header:"Quantity sent",key:"sent",width:15},{header:"Quantity received",key:"received",width:19},{header:"Difference for date",key:"difference",width:18},
+            {header:"All-time difference",key:"allTimeDifference",width:19},{header:"Movement",key:"movement",width:14},{header:"Quantity",key:"quantity",width:12},
+            {header:"User",key:"user",width:24},{header:"Comment",key:"comment",width:34},{header:"Picture",key:"picture",width:16},{header:"Picture link",key:"pictureLink",width:36}
+        ];
+        styleWorksheetHeader(ledger.getRow(1)); ledger.sheetView.showGridLines=false;
+        for (const row of data.transactions) {
+            const direction = clientLedgerDirection(row.item.movement), qty = Number(row.item.quantity)||0;
+            const daily = data.dailyRows.find(d => d.date === row.date && d.asset === row.asset);
+            const excelRow = ledger.addRow([client,row.date,row.time,row.asset,direction === "Sent" ? qty : 0,direction === "Received" ? qty : 0,daily?.difference || 0,row.allTimeDifference,direction,qty,String(row.item.user||""),String(row.item.comment||""),row.item.image ? "" : "—",""]);
+            excelRow.alignment={vertical:"middle",wrapText:true};
+            excelRow.getCell(14).value = row.item.image ? {text:"Open photo",hyperlink:row.item.image} : "";
+            if (row.item.image) { excelRow.getCell(14).font={color:{argb:"FFB794F4"},underline:true}; await addLedgerPhoto(wb,ledger,excelRow.number,13,row.item,includePhotos); }
+            [5,6,10].forEach(c => excelRow.getCell(c).numFmt="#,##0");
+            [7,8].forEach(c => excelRow.getCell(c).numFmt="+#,##0;-#,##0;0");
+        }
+        const total = ledger.addRow([]); total.getCell(1).value=`PERIOD TOTALS — ${periodLabel}`; total.getCell(5).value=data.periodTotals.sent; total.getCell(6).value=data.periodTotals.received; total.getCell(7).value=data.periodTotals.difference; total.getCell(10).value=data.periodTotals.sent+data.periodTotals.received+data.periodTotals.discarded; total.getCell(11).value=`${data.periodTotals.transactions} transactions · ${data.periodTotals.photos} photos`; styleWorksheetTotals(total);
+        [5,6,10].forEach(c=>total.getCell(c).numFmt="#,##0"); total.getCell(7).numFmt="+#,##0;-#,##0;0";
+        ledger.autoFilter={from:"A1",to:`N${Math.max(1,total.number-1)}`}; ledger.pageSetup={orientation:"landscape",fitToPage:true,fitToWidth:1,fitToHeight:0};
+
+        const daily = wb.addWorksheet("Daily Summary", {views:[{state:"frozen",ySplit:1}]});
+        daily.columns=[{header:"Client",key:"client",width:20},{header:"Date",key:"date",width:13},{header:"Asset type",key:"asset",width:22},{header:"Quantity sent",key:"sent",width:16},{header:"Quantity received",key:"received",width:19},{header:"Difference",key:"difference",width:15},{header:"All-time difference at date",key:"allTime",width:24},{header:"Transactions",key:"transactions",width:14},{header:"Pictures",key:"photos",width:12}];
+        styleWorksheetHeader(daily.getRow(1)); daily.sheetView.showGridLines=false;
+        data.dailyRows.forEach(item=>daily.addRow([client,item.date,item.asset,item.sent,item.received,item.difference,item.allTimeDifference,item.transactions,item.photoCount]));
+        const dt= daily.addRow([]); dt.getCell(1).value=`PERIOD TOTALS — ${periodLabel}`; dt.getCell(4).value=data.periodTotals.sent; dt.getCell(5).value=data.periodTotals.received; dt.getCell(6).value=data.periodTotals.difference; dt.getCell(8).value=data.periodTotals.transactions; dt.getCell(9).value=data.periodTotals.photos; styleWorksheetTotals(dt);
+        [4,5,8,9].forEach(c=>dt.getCell(c).numFmt="#,##0"); dt.getCell(6).numFmt="+#,##0;-#,##0;0";
+        daily.autoFilter={from:"A1",to:`I${Math.max(1,dt.number-1)}`};
+
+        const notes=wb.addWorksheet("Ledger Notes"); notes.columns=[{header:"Field",key:"field",width:30},{header:"Meaning",key:"meaning",width:100}]; styleWorksheetHeader(notes.getRow(1)); notes.addRows([
+            ["Client",client],["Period",periodLabel],["Date difference","Sent minus received for the client + asset type on that date."],["All-time difference","Cumulative sent minus received for the client + asset type through that transaction date, including history before the selected export period."],["Picture","Embedded in Client Ledger when enabled and available; Picture link remains as the Drive/source link."],["Period totals","Totals at the bottom are totals for the selected generated period, not a sum of repeated all-time balances."]
+        ]); notes.eachRow((row,i)=>{if(i>1)row.alignment={vertical:"top",wrapText:true};}); notes.sheetView.showGridLines=false;
+        return wb;
+    }
+
+    async function runClientLedgerExport() {
+        const client=$("client-details-title")?.textContent?.trim()||"Unknown client", fromKey=$("client-ledger-export-from")?.value||"", toKey=$("client-ledger-export-to")?.value||"", assetFilter=$("client-ledger-export-asset")?.value||"", includePhotos=Boolean($("client-ledger-export-photos")?.checked), status=$("client-ledger-export-status"), button=$("run-client-ledger-export");
+        if(fromKey&&toKey&&fromKey>toKey){if(status){status.textContent="From date must be on or before To date.";status.classList.add("error");}return;}
+        const data=makeClientLedgerData(client,getDashboardTransactions(),fromKey,toKey,assetFilter);
+        if(!data.transactions.length){if(status){status.textContent="No client transactions match that period/filter.";status.classList.add("error");}return;}
+        const periodLabel=fromKey||toKey?`${fromKey||"start"} → ${toKey||"today"}`:"All available history";
+        try{
+            if(button){button.disabled=true;button.textContent="Building XLSX…";} if(status){status.textContent="Preparing the ledger and embedding available photos…";status.classList.remove("error");}
+            const wb=await buildClientLedgerWorkbook(client,data,periodLabel,includePhotos), buffer=await wb.xlsx.writeBuffer(), blob=new Blob([buffer],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}), url=URL.createObjectURL(blob), safeClient=client.replace(/[^a-z0-9]+/gi,"-").replace(/^-+|-+$/g,"").toLowerCase()||"client", datePart=toKey||fromKey||transactionDateKey(new Date());
+            const a=document.createElement("a");a.href=url;a.download=`${safeClient}-client-ledger-${datePart}.xlsx`;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),3000);
+            if(status)status.textContent=`Exported ${data.transactions.length} transaction${data.transactions.length===1?"":"s"} across ${data.dailyRows.length} daily asset line${data.dailyRows.length===1?"":"s"}.`;
+            if(button){button.disabled=false;button.textContent="Export XLSX";}
+        }catch(error){console.error("Client ledger export failed:",error);if(status){status.textContent=error?.message||"The spreadsheet could not be generated.";status.classList.add("error");}if(button){button.disabled=false;button.textContent="Try export again";}}
     }
 
     function toggleTransactionSummary(button) {
@@ -2802,13 +3015,13 @@ function bindQuickMenu() {
         const labels = points.map(([date], i) => `<text x="${xFor(i)}" y="${height-22}" text-anchor="middle" class="graph-label">${escapeHtml(formatGraphDate(date))}</text>`).join("");
         const pointMarkup = points.map(([date, value], i) => {
             const x = xFor(i), sentY = yFor(value.sent), receivedY = yFor(value.received), discardY = yFor(value.discarded);
-            return `<g><title>${escapeHtml(formatGraphDate(date))}: ${formatNumber(value.sent)} sent, ${formatNumber(value.received)} received, ${formatNumber(value.discarded)} discarded</title>
+            const label = formatGraphDate(date);
+            return `<g>
                 <circle cx="${x}" cy="${sentY}" r="4.5" class="graph-point-sent"></circle>
+                ${graphPointHit(x, sentY, `${label} · Sent: ${formatNumber(value.sent)}`, "graph-point-hit-sent")}
                 <circle cx="${x}" cy="${receivedY}" r="4.5" class="graph-point-received"></circle>
-                ${value.discarded ? `<circle cx="${x}" cy="${discardY}" r="4.5" class="graph-point-discard"></circle>` : ""}
-                <text x="${x}" y="${Math.max(16, sentY-11)}" text-anchor="middle" class="graph-value-label graph-value-sent">${formatNumber(value.sent)}</text>
-                <text x="${x}" y="${Math.min(height-39, receivedY+21)}" text-anchor="middle" class="graph-value-label graph-value-received">${formatNumber(value.received)}</text>
-                ${value.discarded ? `<text x="${x}" y="${Math.max(16, discardY-11)}" text-anchor="middle" class="graph-value-label graph-value-discard">${formatNumber(value.discarded)}</text>` : ""}
+                ${graphPointHit(x, receivedY, `${label} · Received: ${formatNumber(value.received)}`, "graph-point-hit-received")}
+                ${value.discarded ? `<circle cx="${x}" cy="${discardY}" r="4.5" class="graph-point-discard"></circle>${graphPointHit(x, discardY, `${label} · Discarded: ${formatNumber(value.discarded)}`, "graph-point-hit-discard")}` : ""}
             </g>`;
         }).join("");
 
@@ -2822,6 +3035,7 @@ function bindQuickMenu() {
             <path d="${pathFor("received")}" class="graph-line graph-line-received" fill="none"></path>
             ${points.some(([,v]) => v.discarded) ? `<path d="${pathFor("discarded")}" class="graph-line graph-line-discard" fill="none"></path>` : ""}
             ${pointMarkup}${labels}</svg></div>`;
+        bindGraphTooltips(graph.querySelector(".client-graph-svg"));
     }
 
     function renderWarehouseAssetQuantityGraph(asset, transactions, currentBalance) {
@@ -2855,10 +3069,10 @@ function bindQuickMenu() {
         }).join("");
         const labels = points.map(([date], i) => `<text x="${xFor(i)}" y="${height-22}" text-anchor="middle" class="graph-label">${escapeHtml(formatGraphDate(date))}</text>`).join("");
         const pointMarkup = points.map(([date, value], i) => {
-            const x = xFor(i), y = yFor(value);
-            return `<g><title>${escapeHtml(formatGraphDate(date))}: ${formatNumber(value)} quantity</title>
+            const x = xFor(i), y = yFor(value), label = formatGraphDate(date);
+            return `<g>
                 <circle cx="${x}" cy="${y}" r="5" class="graph-point-quantity"></circle>
-                <text x="${x}" y="${Math.max(16, y-12)}" text-anchor="middle" class="graph-value-label graph-value-quantity">${formatNumber(value)}</text>
+                ${graphPointHit(x, y, `${label} · Closing quantity: ${formatNumber(value)}`, "graph-point-hit-quantity")}
             </g>`;
         }).join("");
 
@@ -2868,6 +3082,7 @@ function bindQuickMenu() {
             <path d="${path}" class="graph-line graph-line-quantity" fill="none"></path>
             ${pointMarkup}${labels}</svg></div>
         <div class="asset-history-calculation-note">Calculated from the inventory balance and the recorded transaction ledger. It assumes the ledger contains the complete movement history for this asset.</div>`;
+        bindGraphTooltips(graph.querySelector(".client-graph-svg"));
     }
 
 

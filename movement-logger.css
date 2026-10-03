@@ -692,3 +692,20 @@ th{background:#f8fafc!important;color:#667085!important;border-color:#e7ebf0!imp
 .movement-tag.received{background:#eef9f2!important;color:#176b3a!important}.movement-tag.sent{background:#eef4ff!important;color:#2457a6!important}.movement-tag.discard{background:#fff0ee!important;color:#b42318!important}
 .confirm-icon{width:44px!important;height:44px!important;background:#2563eb!important;color:#fff!important;border-radius:50%!important;font-size:21px!important;box-shadow:0 4px 14px rgba(37,99,235,.18)!important}
 .modal-backdrop{background:rgba(15,23,42,.34)!important}
+
+
+/* Shared mobile quick-links sizing */
+@media(max-width:760px){
+  .quick-nav{border-radius:14px}
+  .menu-toggle{min-height:46px}
+  .menu-links a{min-height:44px;display:flex;align-items:center}
+}
+
+
+/* Project-wide quick-links mobile behavior */
+@media(max-width:760px){
+  .quick-nav .menu-toggle{min-height:46px;width:100%;padding:10px 13px;gap:9px}
+  .quick-nav .menu-links{display:none;grid-template-columns:1fr 1fr;gap:7px;padding:8px}
+  .quick-nav.menu-open .menu-links{display:grid}
+  .quick-nav .menu-links a{min-height:42px;display:flex;align-items:center;justify-content:center;padding:8px 9px;text-align:center;border-radius:9px;font-size:11px;line-height:1.2}
+}

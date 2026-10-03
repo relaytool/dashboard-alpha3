@@ -5,8 +5,8 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>Asset Alerts</title>
-<link rel="stylesheet" href="dashboard.css?v=20261002-dark-v1">
-<link rel="stylesheet" href="operations.css?v=20261002-dark-v1">
+<link rel="stylesheet" href="dashboard.css?v=eod-ledger-20261003">
+<link rel="stylesheet" href="operations.css?v=eod-ledger-20261003">
 </head>
 <body>
 <div id="connection-loading" class="connection-loading hidden" role="status" aria-live="polite" aria-hidden="true">
@@ -22,7 +22,24 @@
   <div><div class="eyebrow">FM OPERATIONS</div><h1>Alerts</h1><p class="muted">Inventory and client alerts generated from routine demand and ledger balances.</p></div>
   <div class="account-area"><img id="user-photo" class="user-photo hidden" alt="User"><div><div id="user-name" class="user-name">Not signed in</div><div id="user-email" class="muted"></div></div><button id="sign-out" class="secondary hidden">Sign out</button></div>
 </header>
-<nav class="quick-nav" aria-label="Quick links"><button type="button" id="menu-toggle" class="menu-toggle" aria-expanded="false" aria-controls="quick-links"><span class="menu-toggle-icon">☰</span><span>Quick links</span><span class="menu-toggle-chevron" aria-hidden="true">⌄</span></button><div id="quick-links" class="menu-links"><a href="index.html">Dashboard</a><a href="movement-logger.html">Record movement</a><a href="routine-outbounds.html">Routine outbounds</a><a class="active" href="alerts.html">Alerts</a><a href="index.html#warehouse-section">Warehouse</a><a href="index.html#clients-section">Clients</a><a href="index.html#audit-trail">Audit trail</a><a href="https://relaytool.github.io/assets-reporting/" target="_blank" rel="noopener">Reporting</a></div></nav>
+<nav class="quick-nav" aria-label="Quick links">
+    <button type="button" id="menu-toggle" class="menu-toggle" aria-expanded="false" aria-controls="quick-links">
+        <span class="menu-toggle-icon">☰</span>
+        <span>Quick links</span>
+        <span class="menu-toggle-chevron" aria-hidden="true">⌄</span>
+    </button>
+    <div id="quick-links" class="menu-links">
+        <a href="index.html">Dashboard</a>
+<a href="movement-logger.html">Record movement</a>
+<a href="routine-outbounds.html">Routine outbounds</a>
+<a href="alerts.html" class="active">Alerts <span id="alerts-nav-badge" class="nav-alert-badge hidden">0</span></a>
+<a href="index.html#warehouse-section">Warehouse</a>
+<a href="index.html#clients-section">Clients</a>
+<a href="index.html#audit-trail">Audit trail</a>
+<a href="https://relaytool.github.io/assets-reporting/" target="_blank" rel="noopener">EOD routines</a>
+<a href="https://relaytool.github.io/dailyreport/" target="_blank" rel="noopener">Daily reporting</a>
+    </div>
+</nav>
 <section id="login-card" class="card login-card ops-login"><div class="eyebrow">ALERTS</div><h2>Sign in to continue</h2><p class="muted">Alerts are stored in the Assets Inventory Ledger. Open alerts are rebuilt on refresh; ignored and attended history is kept.</p><div id="google-signin-button"></div><button id="grant-access" class="primary hidden">Connect Google Sheets</button><p id="auth-status" class="status"></p></section>
 <section id="alerts-page" class="hidden">
   <div class="toolbar card ops-toolbar-card">
@@ -100,5 +117,5 @@
   </div>
 </div>
 <script src="https://accounts.google.com/gsi/client" async defer onload="window.dispatchEvent(new Event('fm-google-loaded'))"></script>
-<script src="config.js?v=20261002-dark-v1"></script><script src="routine-alert-utils.js?v=20261002-dark-v1"></script><script src="alerts.js?v=20261002-dark-v1"></script>
+<script src="config.js?v=eod-ledger-20261003"></script><script src="routine-alert-utils.js?v=eod-ledger-20261003"></script><script src="alerts.js?v=eod-ledger-20261003"></script>
 </body></html>

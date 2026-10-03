@@ -54,13 +54,25 @@
     });
   }
 
-  function bindQuickMenu(){
-    const nav=document.querySelector(".quick-nav"), toggle=$("menu-toggle"), links=$("quick-links"); if(!nav||!toggle)return;
-    const key="fmQuickMenuOpen";
-    const setOpen=open=>{nav.classList.toggle("menu-open",open);toggle.setAttribute("aria-expanded",String(open));localStorage.setItem(key,open?"1":"0")};
-    const saved=localStorage.getItem(key); setOpen(saved===null?!matchMedia("(max-width: 760px)").matches:saved==="1");
-    toggle.addEventListener("click",()=>setOpen(!nav.classList.contains("menu-open")));
-    links?.addEventListener("click",()=>{if(matchMedia("(max-width: 760px)").matches)setOpen(false)});
+  function bindQuickMenu() {
+    const nav = document.querySelector(".quick-nav");
+    const toggle = $("menu-toggle");
+    const links = $("quick-links");
+    if (!nav || !toggle) return;
+    const key = "fmQuickMenuOpen";
+    const mobileQuery = window.matchMedia("(max-width: 760px)");
+    const isMobile = () => mobileQuery.matches;
+    const setOpen = open => {
+      nav.classList.toggle("menu-open", Boolean(open));
+      toggle.setAttribute("aria-expanded", String(Boolean(open)));
+      if (!isMobile()) localStorage.setItem(key, open ? "1" : "0");
+    };
+    const saved = localStorage.getItem(key);
+    setOpen(isMobile() ? false : saved === "1");
+    toggle.addEventListener("click", () => setOpen(!nav.classList.contains("menu-open")));
+    links?.addEventListener("click", event => { if (event.target.closest("a") && isMobile()) setOpen(false); });
+    const onViewportChange = event => { if (event.matches) setOpen(false); };
+    if (mobileQuery.addEventListener) mobileQuery.addEventListener("change", onViewportChange); else mobileQuery.addListener(onViewportChange);
   }
 
   function waitForGoogle(){

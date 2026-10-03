@@ -157,3 +157,19 @@ body{background:#f7f9fc!important;color:#17202a!important}
 .ops-page .connection-loading-card strong{color:#17202a!important}
 .ops-page .connection-loading-card span:last-child{color:#667085!important}
 .ops-page .loading-spinner{border-color:#dfe5ec!important;border-top-color:#111827!important}
+
+
+/* Shared mobile quick-links sizing */
+@media(max-width:760px){
+  .quick-nav .menu-toggle{min-height:46px}
+  .quick-nav .menu-links a{min-height:44px;display:flex;align-items:center}
+}
+
+
+/* Project-wide quick-links mobile behavior */
+@media(max-width:760px){
+  .quick-nav .menu-toggle{min-height:46px;width:100%;padding:10px 13px;gap:9px}
+  .quick-nav .menu-links{display:none;grid-template-columns:1fr 1fr;gap:7px;padding:8px}
+  .quick-nav.menu-open .menu-links{display:grid}
+  .quick-nav .menu-links a{min-height:42px;display:flex;align-items:center;justify-content:center;padding:8px 9px;text-align:center;border-radius:9px;font-size:11px;line-height:1.2}
+}
